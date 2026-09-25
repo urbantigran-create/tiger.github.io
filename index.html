@@ -2,9 +2,75 @@
 <html lang="ru"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>🛸 AETHER — Симулятор БПЛА</title>
+<title>🛸 SKYFORGE — Симулятор БПЛА</title>
+<script>
+/* WAVE FIX 4: ранний перехватчик ошибок — работает ДО главного скрипта.
+   Ловит: runtime errors, syntax errors, ошибки загрузки ресурсов, unhandled promise rejection.
+   Показывает ошибку поверх #loading — даже если главный скрипт вообще не запустился. */
+(function(){
+  window.__AETHER_ERRORS=[];
+  var _errShown=false;
+  function _esc(s){return String(s||'').replace(/[<>&]/g,function(c){return c==='<'?'&lt;':c==='>'?'&gt;':'&amp;';});}
+  window._showFatalError=function(err,stage){
+    var msg=stage?(('['+stage+'] ')+((err&&err.message)||String(err))):((err&&err.message)||String(err));
+    var stack=(err&&err.stack)||'';
+    console.error('[AETHER FATAL]',stage,err);
+    window.__AETHER_ERRORS.push({stage:stage,msg:msg,stack:stack,ts:Date.now()});
+    var el=document.getElementById('loading');
+    if(!el){
+      el=document.createElement('div');
+      el.id='loading';
+      (document.body||document.documentElement).appendChild(el);
+    }
+    if(_errShown&&el.dataset.errShown==='1')return;
+    _errShown=true;el.dataset.errShown='1';
+    el.style.display='flex';
+    el.innerHTML=
+      '<div style="color:#ff4444;font-size:22px;letter-spacing:3px;font-weight:700;">❌ ОШИБКА</div>'+
+      '<div style="font-size:14px;color:#ff9999;max-width:82vw;text-align:center;word-break:break-word;line-height:1.5;">'+_esc(msg)+'</div>'+
+      (stack?'<pre style="font-size:10px;color:#aaa;max-width:82vw;max-height:220px;overflow:auto;text-align:left;background:rgba(0,0,0,0.55);padding:10px;border-radius:6px;white-space:pre-wrap;margin:0;">'+_esc(stack)+'</pre>':'')+
+      '<div style="font-size:11px;color:#777;margin-top:6px;">F12 → Console · Ctrl+Shift+R — перезагрузить</div>';
+  };
+  window.addEventListener('error',function(e){
+    // Ошибка загрузки тега <script> / <link> / <img>
+    if(e.target&&e.target!==window&&e.target.tagName){
+      var t=e.target;
+      _showFatalError({message:'Не удалось загрузить '+t.tagName.toLowerCase()+': '+(t.src||t.href||'')},'resource');
+      return;
+    }
+    // Обычный runtime/syntax error
+    _showFatalError(e.error||{message:e.message,stack:'@'+(e.filename||'')+':'+(e.lineno||0)+':'+(e.colno||0)},'window');
+  },true);
+  window.addEventListener('unhandledrejection',function(e){
+    var r=e.reason||{};
+    _showFatalError({message:'Promise: '+(r.message||String(r)),stack:r.stack||''},'promise');
+  });
+})();
+</script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;touch-action:none;-webkit-tap-highlight-color:transparent}
+  /* Мобильные подсказки для джойстиков */
+body[data-input="touch"] .joystick::after{
+  content:attr(data-tip);
+  position:absolute;
+  bottom:-14px;left:50%;transform:translateX(-50%);
+  font-size:9px;color:rgba(0,229,255,0.6);
+  letter-spacing:1px;white-space:nowrap}
+body[data-input="touch"] .joystick{padding-bottom:4px}
+
+/* Desktop: прятать мобильный UI полностью */
+body[data-input="desktop"] #mobileControls,
+body[data-input="desktop"] #mobileButtons{display:none !important}
+
+/* Touch: прятать клавиатурные подсказки */
+body[data-input="touch"] #controls,
+body[data-input="touch"] #hotkeyHint{display:none !important}
+body[data-input="touch"] #stickIndicator{display:none !important}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{touch-action:none}
+canvas{touch-action:none}
+#menu{touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+#menu *{touch-action:pan-y}
+#menu .sec-block,#menu .quickStart,#menu .menu-stats,#menu .menu-footer{touch-action:pan-y}
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-track{background:rgba(0,0,0,0.6)}
 ::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#00e5ff,#00ffb8);border-radius:4px}
@@ -24,6 +90,9 @@ canvas{display:block}
 #hud .vrs{color:#ff5500;font-weight:bold;animation:vrsPulse 0.4s infinite}
 @keyframes vrsPulse{0%,100%{opacity:1}50%{opacity:0.5}}
 #controls{position:absolute;bottom:15px;left:15px;border-radius:8px;padding:8px 12px;font-size:10.5px;line-height:1.55;display:none;z-index:55;background:linear-gradient(135deg,rgba(3,8,18,0.9),rgba(1,3,10,0.94));border:1px solid rgba(0,229,255,0.2);color:#c8e0f0;max-width:340px}
+body[data-input="touch"] #controls{display:none !important}
+body[data-input="touch"] #hotkeyHint{display:none !important}
+body[data-input="touch"] #stickIndicator{display:none !important}
 #controls b{color:#00e5ff}
 
 /* ═══ Flight Mode ═══ */
@@ -859,8 +928,45 @@ canvas{display:block}
 .joystick{width:120px;height:120px;background:radial-gradient(circle,rgba(0,30,50,0.6),rgba(0,10,25,0.5));border:2px solid rgba(0,229,255,0.4);border-radius:50%;position:relative;pointer-events:auto}
 .joystick .knob{width:50px;height:50px;background:radial-gradient(circle at 30% 30%,rgba(0,229,255,0.9),rgba(0,140,180,0.8));border:2px solid #00e5ff;border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
 .joystick .label{position:absolute;top:-22px;left:50%;transform:translateX(-50%);color:#00e5ff;font-size:10.5px;white-space:nowrap}
-#mobileButtons{position:absolute;top:80px;right:20px;display:none;flex-direction:column;gap:8px;z-index:30}
-#mobileButtons button{width:48px;height:48px;background:linear-gradient(135deg,rgba(10,20,40,0.85),rgba(5,10,25,0.85));border:1px solid rgba(0,229,255,0.5);border-radius:50%;color:#00e5ff;font-family:inherit;font-size:16px;cursor:pointer}
+/* ═══════════════════════════════════════════════════════════════
+   WAVE G — мобильные кнопки: 6 штук, сгруппированы по назначению
+   ═══════════════════════════════════════════════════════════════ */
+#mobileButtons{
+  position:absolute;top:80px;right:20px;
+  display:none;flex-direction:column;gap:8px;z-index:30}
+#mobileButtons button{
+  width:52px;height:52px;
+  background:linear-gradient(135deg,rgba(10,20,40,0.85),rgba(5,10,25,0.85));
+  border:1px solid rgba(0,229,255,0.5);
+  border-radius:50%;color:#00e5ff;font-family:inherit;
+  font-size:17px;font-weight:700;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+  transition:transform 0.1s,background 0.15s}
+#mobileButtons button:active{
+  transform:scale(0.9);
+  background:linear-gradient(135deg,rgba(0,180,120,0.9),rgba(0,100,70,0.9));
+  color:#fff}
+/* Hover — сверху, отдельным блоком */
+#mbHover{
+  border-color:rgba(0,255,140,0.7) !important;
+  color:#00ffcc !important;
+  font-size:15px !important}
+#mbHover.active{
+  background:linear-gradient(135deg,rgba(0,200,120,0.9),rgba(0,120,70,0.9)) !important;
+  color:#fff !important;
+  box-shadow:0 0 20px rgba(0,255,140,0.7) !important}
+/* Газ вверх/вниз — рядом */
+#mbThrUp{border-color:rgba(255,200,68,0.6) !important;color:#ffcc44 !important}
+#mbThrDn{border-color:rgba(255,120,68,0.6) !important;color:#ff8844 !important}
+#mbThrUp:active,#mbThrDn:active{
+  background:linear-gradient(135deg,rgba(255,180,60,0.9),rgba(180,120,20,0.9)) !important;
+  color:#fff !important}
+/* Режим полёта — показываем букву */
+#mbMode{
+  font-size:13px !important;
+  letter-spacing:0.5px;
+  border-color:rgba(0,229,255,0.7) !important}
 
 /* ═══ WAVE 8: МИКШЕР ═══ */
 #mixerPanel{
@@ -1174,7 +1280,7 @@ body.photo-mode #photoPanel{cursor:default}
 .ach-item .prog{color:#ff88cc;font-size:10.5px;font-weight:bold}
 
 /* ═══ Главная ═══ */
-#menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;overflow-y:auto;overflow-x:hidden;background:#04060d;z-index:100;padding:36px 22px 50px}
+#menu{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;overflow-y:auto;overflow-x:hidden;background:#04060d;z-index:100;padding:36px 22px 50px;touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;scroll-behavior:smooth}
 #menu .bg-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 #menu .bg-vignette{position:absolute;inset:0;background:radial-gradient(ellipse 100% 60% at 50% 0%,rgba(0,180,255,0.22),transparent 55%),radial-gradient(ellipse 70% 50% at 100% 100%,rgba(180,60,240,0.16),transparent 60%),radial-gradient(ellipse 70% 50% at 0% 100%,rgba(0,255,180,0.13),transparent 60%),radial-gradient(ellipse 100% 100% at 50% 50%,transparent 30%,rgba(0,0,0,0.75) 100%)}
 #menu .bg-grid{position:absolute;left:-30%;right:-30%;bottom:-40px;height:70vh;background-image:linear-gradient(rgba(0,229,255,0.14) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.14) 1px,transparent 1px);background-size:60px 60px;transform:perspective(650px) rotateX(68deg);transform-origin:center bottom;mask-image:linear-gradient(to top,#000 0%,transparent 88%);-webkit-mask-image:linear-gradient(to top,#000 0%,transparent 88%);animation:gridFlow 8s linear infinite}
@@ -1208,11 +1314,17 @@ body.photo-mode #photoPanel{cursor:default}
   flex:1;display:flex;align-items:center;gap:14px;
   padding:14px 20px;
   background:linear-gradient(135deg,rgba(10,18,32,0.9),rgba(4,8,18,0.95));
-  border:1px solid rgba(0,229,255,0.3);
-  border-radius:8px;
+  border:1px solid rgba(0,229,255,0.28);
+  border-radius:10px;
   cursor:pointer;font-family:inherit;
   color:#c8e0f0;text-align:left;
-  transition:all 0.25s}
+  transition:all 0.25s;
+  position:relative;overflow:hidden}
+.qs-btn::before{
+  content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(0,229,255,0.08),transparent);
+  transition:left 0.5s}
+.qs-btn:hover::before{left:100%}
 .qs-btn:hover{
   border-color:rgba(0,229,255,0.85);
   background:linear-gradient(135deg,rgba(0,40,70,0.95),rgba(0,15,40,0.95));
@@ -1220,87 +1332,219 @@ body.photo-mode #photoPanel{cursor:default}
   box-shadow:0 12px 30px rgba(0,229,255,0.18)}
 .qs-btn.primary{
   border-color:rgba(0,229,255,0.7);
-  background:linear-gradient(135deg,rgba(0,60,110,0.9),rgba(0,30,60,0.95))}
+  background:linear-gradient(135deg,rgba(0,60,110,0.92),rgba(0,30,60,0.95));
+  box-shadow:0 0 24px rgba(0,229,255,0.12) inset}
 .qs-btn.primary:hover{
   background:linear-gradient(135deg,rgba(0,90,150,0.95),rgba(0,50,100,0.95));
   box-shadow:0 12px 30px rgba(0,229,255,0.3)}
 .qs-btn .qs-ico{
-  font-size:24px;flex-shrink:0;width:32px;text-align:center}
+  font-size:24px;flex-shrink:0;width:34px;text-align:center}
+.qs-btn .qs-arrow{
+  color:rgba(0,229,255,0.4);font-size:22px;
+  transition:transform 0.25s;flex-shrink:0}
+.qs-btn:hover .qs-arrow{transform:translateX(4px);color:#00e5ff}
 .qs-btn .qs-txt{
   flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .qs-btn .qs-title{
   color:#fff;font-size:13.5px;font-weight:700;letter-spacing:1px}
 .qs-btn .qs-sub{
   color:#5a7a9a;font-size:10.5px;letter-spacing:1.2px}
-.hero-human{width:90px;height:140px;flex-shrink:0;position:relative;opacity:0.55}
-.hero-human svg{width:100%;height:100%;filter:drop-shadow(0 0 20px rgba(0,229,255,0.4))}
-.hero-human .bob{animation:bobFloat 4s ease-in-out infinite;transform-origin:center bottom}
-@keyframes bobFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-.hero-human .ant{animation:antPulse 1.5s ease-in-out infinite}
-@keyframes antPulse{0%,100%{opacity:0.3;transform:scale(1)}50%{opacity:1;transform:scale(1.4)}}
-.hero-human .led{animation:ledPulse 2s ease-in-out infinite}
-@keyframes ledPulse{0%,100%{fill:#00ffcc;opacity:1}50%{fill:#0088ff;opacity:0.5}}
-.hero-human .scan{animation:humanScan 3s linear infinite}
-@keyframes humanScan{from{stroke-dashoffset:0}to{stroke-dashoffset:-200}}
-.hero-content{flex:1;text-align:center;min-width:0}
-.hero-tag{display:inline-flex;align-items:center;gap:10px;padding:4px 14px 4px 10px;margin-bottom:14px;font-size:9.5px;letter-spacing:4px;font-weight:600;color:#8ff6ff;background:linear-gradient(135deg,rgba(0,180,255,0.08),rgba(120,40,220,0.06));border:1px solid rgba(0,229,255,0.3);border-radius:3px;text-transform:uppercase}
+/* ═══ WAVE C: SKYFORGE эмблема вместо human ═══ */
+.hero-emblem{
+  width:160px;height:160px;flex-shrink:0;position:relative;
+  filter:drop-shadow(0 0 30px rgba(0,229,255,0.5)) drop-shadow(0 0 60px rgba(179,102,255,0.25))}
+.hero-emblem .emblem-svg{width:100%;height:100%;overflow:visible}
+.hero-emblem .emblem-ring{transform-origin:100px 100px;animation:emblemSpin 24s linear infinite}
+.hero-emblem .emblem-core{transform-origin:100px 100px;animation:emblemPulse 3s ease-in-out infinite}
+.hero-emblem .emblem-bolt{animation:boltFlicker 2.5s ease-in-out infinite;transform-origin:100px 100px}
+.hero-emblem .emblem-core-dot{animation:coreDot 1.2s ease-in-out infinite}
+.hero-emblem .emblem-core-pulse{transform-origin:100px 100px;animation:corePulse 2s ease-out infinite}
+.hero-emblem .emblem-props circle{filter:drop-shadow(0 0 3px rgba(0,229,255,0.8))}
+.hero-emblem .prop-rot{transform-origin:center;animation:propSpin 0.6s linear infinite}
+.hero-emblem .prop-rot:nth-child(5){animation-duration:0.55s}
+.hero-emblem .prop-rot:nth-child(6){animation-duration:0.65s}
+.hero-emblem .prop-rot:nth-child(7){animation-duration:0.5s}
+.hero-emblem .prop-rot:nth-child(8){animation-duration:0.7s}
+@keyframes emblemSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes emblemPulse{0%,100%{opacity:1}50%{opacity:0.82}}
+@keyframes boltFlicker{
+  0%,100%{opacity:1;filter:drop-shadow(0 0 4px #00ffcc)}
+  45%{opacity:0.85;filter:drop-shadow(0 0 8px #00ffff)}
+  55%{opacity:1;filter:drop-shadow(0 0 12px #b366ff)}
+}
+@keyframes coreDot{0%,100%{opacity:1;r:3}50%{opacity:0.5;r:4}}
+@keyframes corePulse{0%{r:10;opacity:0.6}100%{r:40;opacity:0}}
+@keyframes propSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.hero-content{flex:1;text-align:center;min-width:0;position:relative}
+.hero-tag{
+  display:inline-flex;align-items:center;gap:10px;
+  padding:5px 16px 5px 12px;margin-bottom:16px;
+  font-size:10px;letter-spacing:5px;font-weight:600;
+  color:#8ff6ff;
+  background:linear-gradient(135deg,rgba(0,180,255,0.10),rgba(179,102,255,0.08));
+  border:1px solid rgba(0,229,255,0.35);
+  border-radius:20px;
+  text-transform:uppercase;
+  box-shadow:0 0 20px rgba(0,180,255,0.15)}
 .hero-tag .dot-pulse{width:6px;height:6px;background:#00ffcc;border-radius:50%;box-shadow:0 0 12px #00ffcc;animation:pulseDot 1.6s infinite}
 @keyframes pulseDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.7)}}
 .hero-tag .sep{color:rgba(0,229,255,0.4)}
 .hero-title-wrap{position:relative;display:inline-block;margin-bottom:10px;line-height:0.9}
-.hero-title{font-size:64px;font-weight:800;letter-spacing:14px;margin:0;background:linear-gradient(180deg,#fff 0%,#a8f0ff 25%,#00d4ff 55%,#0088cc 80%,#5a2a9a 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 24px rgba(0,180,255,0.5));background-size:100% 250%;animation:titleShift 8s ease-in-out infinite;position:relative;z-index:2}
+.hero-title{
+  font-size:clamp(46px,7vw,86px);font-weight:900;
+  letter-spacing:clamp(4px,1.2vw,16px);
+  margin:0;
+  background:linear-gradient(180deg,#fff 0%,#a8f0ff 25%,#00d4ff 55%,#0088cc 80%,#b366ff 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 24px rgba(0,180,255,0.55)) drop-shadow(0 0 48px rgba(179,102,255,0.25));
+  background-size:100% 250%;
+  animation:titleShift 8s ease-in-out infinite;
+  position:relative;z-index:2;
+  padding:0 8px}
 @keyframes titleShift{0%,100%{background-position:0 0%}50%{background-position:0 100%}}
-.hero-title-wrap::before,.hero-title-wrap::after{content:'AETHER';position:absolute;top:0;left:0;right:0;font-size:64px;font-weight:800;letter-spacing:14px;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;pointer-events:none;mix-blend-mode:screen;opacity:0.15}
+.hero-title-wrap::before,.hero-title-wrap::after{
+  content:'SKYFORGE';
+  position:absolute;top:0;left:0;right:0;
+  font-size:clamp(46px,7vw,86px);font-weight:900;
+  letter-spacing:clamp(4px,1.2vw,16px);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  pointer-events:none;mix-blend-mode:screen;opacity:0.15;
+  padding:0 8px}
 .hero-title-wrap::before{background:#ff0080;transform:translate(-3px,0);animation:aberA 3.5s ease-in-out infinite}
 .hero-title-wrap::after{background:#00ffd0;transform:translate(3px,0);animation:aberB 3.5s ease-in-out infinite}
 @keyframes aberA{0%,100%{transform:translate(-3px,0)}50%{transform:translate(-5px,1px)}}
 @keyframes aberB{0%,100%{transform:translate(3px,0)}50%{transform:translate(5px,-1px)}}
 .hero-underline{position:relative;width:min(320px,60vw);height:2px;margin:14px auto;background:linear-gradient(90deg,transparent,#00e5ff 20%,#fff 50%,#b366ff 80%,transparent);box-shadow:0 0 20px rgba(0,229,255,0.7)}
-.hero-sub{color:#a8cfe6;font-size:12.5px;letter-spacing:5px;margin-bottom:6px;text-transform:uppercase;font-weight:500}
-.hero-meta{color:#4a6b86;font-size:10.5px;letter-spacing:3px}
-.hero-meta b{color:#00e5ff;font-weight:600}
-@media(max-width:900px){.hero-human{display:none}.hero-title,.hero-title-wrap::before,.hero-title-wrap::after{font-size:72px;letter-spacing:14px}}
-@media(max-width:600px){.hero-title,.hero-title-wrap::before,.hero-title-wrap::after{font-size:48px;letter-spacing:8px}#menu{padding:24px 14px 40px}#menu .corner{width:40px;height:40px}#menu .hud-line{display:none}}
+.hero-sub{
+  color:#b8d9ee;font-size:13px;letter-spacing:5px;
+  margin-bottom:8px;text-transform:uppercase;font-weight:500;
+  opacity:0.9}
+.hero-meta{
+  color:#5a7b96;font-size:11px;letter-spacing:3px;
+  opacity:0.9}
+.hero-meta b{color:#00e5ff;font-weight:700;letter-spacing:2px}
+@media(max-width:900px){
+  .hero-emblem{width:120px;height:120px}
+  .hero-title,.hero-title-wrap::before,.hero-title-wrap::after{
+    font-size:clamp(42px,9vw,66px);letter-spacing:clamp(3px,1.4vw,10px)}
+}
+@media(max-width:600px){
+  .hero-emblem{width:92px;height:92px;opacity:0.9}
+  .hero-title,.hero-title-wrap::before,.hero-title-wrap::after{
+    font-size:clamp(34px,11vw,48px);letter-spacing:clamp(2px,1.6vw,7px)}
+  #menu{padding:24px 14px 40px}
+  #menu .corner{width:40px;height:40px}
+  #menu .hud-line{display:none}
+}
 .sec-block{width:100%;max-width:1320px;margin-bottom:32px;z-index:2;position:relative}
 .sec-head{display:flex;align-items:center;gap:14px;margin-bottom:14px;padding:0 6px}
 .sec-bracket{width:12px;height:12px;border:2px solid #00e5ff}
 .sec-bracket.tl{border-right:none;border-bottom:none}
 .sec-bracket.br{border-left:none;border-top:none;border-color:#b366ff}
 .sec-text{flex:1}
-.sec-title{color:#00e5ff;font-size:11.5px;letter-spacing:5px;font-weight:700;text-transform:uppercase}
-.sec-sub{color:#5a7a9a;font-size:10.5px;letter-spacing:1.2px;margin-top:3px}
+.sec-title{
+  color:#00e5ff;font-size:12px;letter-spacing:6px;font-weight:700;
+  text-transform:uppercase;
+  text-shadow:0 0 12px rgba(0,229,255,0.35)}
+.sec-sub{color:#6a8aa8;font-size:10.5px;letter-spacing:1.4px;margin-top:4px}
 .sec-sub kbd{background:rgba(0,229,255,0.16);border:1px solid rgba(0,229,255,0.5);border-radius:3px;padding:1px 7px;color:#00e5ff;font-family:inherit;font-size:9.5px}
 #modelSelector{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
 @media(max-width:900px){#modelSelector{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:600px){#modelSelector{grid-template-columns:repeat(3,1fr)}}
-.model-chip{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 8px 12px;min-height:96px;cursor:pointer;overflow:hidden;background:linear-gradient(180deg,rgba(10,18,32,0.85),rgba(4,8,18,0.9));border:1px solid rgba(0,229,255,0.2);border-radius:8px;transition:all 0.25s}
-.model-chip:hover{border-color:rgba(0,229,255,0.85);background:linear-gradient(180deg,rgba(0,40,70,0.85),rgba(0,15,40,0.9));transform:translateY(-3px)}
-.model-chip.active{border-color:#ffcc44;background:linear-gradient(180deg,rgba(70,45,0,0.85),rgba(35,20,0,0.9));box-shadow:0 0 20px rgba(255,200,68,0.25)}
-.model-chip .chip-icon{font-size:30px;margin-bottom:6px;transition:transform 0.25s}
-.model-chip:hover .chip-icon{transform:scale(1.12)}
+.model-chip{
+  position:relative;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:14px 8px 12px;min-height:100px;
+  cursor:pointer;overflow:hidden;
+  background:linear-gradient(180deg,rgba(10,18,32,0.85),rgba(4,8,18,0.9));
+  border:1px solid rgba(0,229,255,0.2);
+  border-radius:10px;
+  transition:all 0.28s cubic-bezier(0.22,1,0.36,1)}
+.model-chip:hover{
+  border-color:rgba(0,229,255,0.9);
+  background:linear-gradient(180deg,rgba(0,40,70,0.85),rgba(0,15,40,0.9));
+  transform:translateY(-3px);
+  box-shadow:0 10px 28px rgba(0,229,255,0.15)}
+.model-chip.active{
+  border-color:#ffcc44;
+  background:linear-gradient(180deg,rgba(70,45,0,0.85),rgba(35,20,0,0.9));
+  box-shadow:0 0 24px rgba(255,200,68,0.35)}
+.model-chip .chip-icon{
+  font-size:32px;margin-bottom:8px;
+  transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1)}
+.model-chip:hover .chip-icon{transform:scale(1.15) translateY(-2px)}
 .model-chip .chip-name{color:#c8e0f0;font-size:11px;text-align:center;font-weight:700;letter-spacing:0.5px}
 .model-chip.active .chip-name{color:#ffdd88}
 .worlds-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 @media(max-width:900px){.worlds-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:650px){.worlds-grid{grid-template-columns:repeat(2,1fr)}}
-.world-card{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px 10px 16px;min-height:120px;cursor:pointer;overflow:hidden;background:linear-gradient(180deg,rgba(8,14,26,0.9),rgba(3,6,14,0.95));border:1px solid rgba(0,229,255,0.22);border-radius:8px;transition:all 0.28s}
-.world-card:hover{border-color:rgba(0,229,255,0.85);transform:translateY(-4px);box-shadow:0 14px 36px rgba(0,229,255,0.18)}
-.world-card .w-icon{font-size:38px;margin-bottom:8px;transition:transform 0.3s}
-.world-card:hover .w-icon{transform:scale(1.15)}
-.world-card .w-name{color:#c8e0f0;font-size:12.5px;text-align:center;font-weight:700;letter-spacing:0.5px}
-.world-card .w-tag{font-size:9.5px;color:#4a6b86;letter-spacing:2px;margin-top:4px;font-weight:600}
+.world-card{
+  position:relative;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:20px 10px 16px;min-height:128px;
+  cursor:pointer;overflow:hidden;
+  background:linear-gradient(180deg,rgba(8,14,26,0.9),rgba(3,6,14,0.95));
+  border:1px solid rgba(0,229,255,0.22);
+  border-radius:10px;
+  transition:all 0.3s cubic-bezier(0.22,1,0.36,1)}
+.world-card::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 30%,rgba(0,229,255,0.08),transparent 65%);
+  opacity:0;transition:opacity 0.3s;pointer-events:none}
+.world-card:hover::before{opacity:1}
+.world-card:hover{
+  border-color:rgba(0,229,255,0.9);
+  transform:translateY(-4px);
+  box-shadow:0 14px 40px rgba(0,229,255,0.22),0 0 0 1px rgba(0,229,255,0.15) inset}
+.world-card .w-icon{
+  font-size:40px;margin-bottom:10px;
+  transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  filter:drop-shadow(0 0 8px rgba(0,229,255,0.25))}
+.world-card:hover .w-icon{
+  transform:scale(1.18) translateY(-2px);
+  filter:drop-shadow(0 0 16px rgba(0,229,255,0.55))}
+.world-card .w-name{
+  color:#d0e4f0;font-size:12.5px;text-align:center;
+  font-weight:700;letter-spacing:0.5px}
+.world-card .w-tag{
+  font-size:9.5px;color:#5a7b96;letter-spacing:2.5px;
+  margin-top:5px;font-weight:600;text-transform:uppercase}
 .modes-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 @media(max-width:900px){.modes-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:500px){.modes-grid{grid-template-columns:1fr}}
-.mode-card{position:relative;display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;overflow:hidden;background:linear-gradient(135deg,rgba(10,18,32,0.85),rgba(4,8,18,0.9));border:1px solid rgba(0,229,255,0.22);border-radius:4px;transition:all 0.25s;text-align:left}
-.mode-card:hover{background:linear-gradient(135deg,rgba(0,50,90,0.7),rgba(0,25,55,0.7));border-color:rgba(0,229,255,0.7);transform:translateX(5px)}
-.mode-card .m-icon{font-size:24px;flex-shrink:0}
+.mode-card{
+  position:relative;display:flex;align-items:center;gap:12px;
+  padding:14px 16px;cursor:pointer;overflow:hidden;
+  background:linear-gradient(135deg,rgba(10,18,32,0.85),rgba(4,8,18,0.9));
+  border:1px solid rgba(0,229,255,0.22);
+  border-radius:8px;
+  transition:all 0.28s cubic-bezier(0.22,1,0.36,1);
+  text-align:left}
+.mode-card::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
+  background:linear-gradient(180deg,#00e5ff,#b366ff);
+  transform:scaleY(0);transform-origin:center;transition:transform 0.3s}
+.mode-card:hover::before{transform:scaleY(1)}
+.mode-card:hover{
+  background:linear-gradient(135deg,rgba(0,50,90,0.75),rgba(0,25,55,0.75));
+  border-color:rgba(0,229,255,0.7);
+  transform:translateX(5px);
+  box-shadow:0 8px 24px rgba(0,229,255,0.12)}
+.mode-card .m-icon{font-size:24px;flex-shrink:0;transition:transform 0.28s}
+.mode-card:hover .m-icon{transform:scale(1.12)}
 .mode-card .m-info{flex:1;min-width:0}
 .mode-card .m-title{color:#c8e0f0;font-size:13px;font-weight:600}
 .mode-card .m-desc{color:#5a7a9a;font-size:10.5px;margin-top:2px}
 .mode-card .m-arrow{color:#4a6b86;font-size:18px;flex-shrink:0}
 .menu-stats{display:flex;gap:12px;margin-top:28px;z-index:2;flex-wrap:wrap;justify-content:center;max-width:1320px;width:100%;position:relative}
-.stat-box{display:flex;align-items:center;gap:12px;padding:12px 18px;position:relative;background:linear-gradient(180deg,rgba(8,15,32,0.88),rgba(3,8,18,0.9));border:1px solid rgba(0,229,255,0.28);border-radius:5px;min-width:200px;flex:1;max-width:300px;overflow:hidden;transition:all 0.25s}
+.stat-box{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 18px;position:relative;
+  background:linear-gradient(180deg,rgba(8,15,32,0.88),rgba(3,8,18,0.9));
+  border:1px solid rgba(0,229,255,0.28);
+  border-radius:8px;
+  min-width:200px;flex:1;max-width:300px;
+  overflow:hidden;transition:all 0.28s}
 .stat-box::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#00e5ff,#0088cc)}
 .stat-box.quiz-stat::before{background:linear-gradient(180deg,#ffcc44,#cc8800)}
 .stat-box.ach-stat::before{background:linear-gradient(180deg,#ff66cc,#aa3388)}
@@ -1316,8 +1560,12 @@ body.photo-mode #photoPanel{cursor:default}
 .ach-stat .stat-value{color:#ff66cc}
 .menu-footer{margin-top:34px;text-align:center;z-index:2;position:relative;width:100%;max-width:1320px}
 .footer-line{width:58%;height:1px;margin:0 auto 16px;background:linear-gradient(90deg,transparent,rgba(0,229,255,0.5),rgba(179,102,255,0.5),transparent)}
-.footer-text{color:#3a5a70;font-size:10.5px;letter-spacing:3.5px;font-weight:500}
-.footer-sub{color:#253a4a;font-size:9.5px;letter-spacing:3px;margin-top:6px}
+.footer-text{
+  color:#4a6a80;font-size:11px;letter-spacing:4px;
+  font-weight:600;text-transform:uppercase}
+.footer-sub{
+  color:#2a4a5a;font-size:9.5px;letter-spacing:3px;margin-top:8px;
+  opacity:0.85}
 /* ═══════════════════════════════════════════
    UI REFACTOR — компактный HUD + F1-F9
    ═══════════════════════════════════════════ */
@@ -1451,6 +1699,539 @@ body.photo-mode #photoPanel{cursor:default}
 #hud{font-size:11.5px;min-width:260px;padding:10px 14px}
 
 /* Новые панели по умолчанию скрыты — но структура сохранена */
+
+/* ═══ WAVE 9: Прозрачность HUD ═══ */
+body{--hud-opacity:1}
+#topright,#miniHud,#compass,#attitude,#flightMode,#flightTimer,
+#envPanel,#timeSlider,#minimap,#homeArrow,#homeDistance,
+#stickIndicator,#camPanel,#crosshair,#warnings,#damageIndicator,
+#hud,#controls,#preflight,#geofenceUI,#blackboxDot,
+#weatherInd,#seasonInd,#gpsSats,#thermalUpdraft,
+#autopilotInd,#quizScore,#gameModePanel,#mission,
+#progressBar,#infPanel,#sensorPanel,#physPanel,
+#physExtra,#apPanel,#telemetry,#theoryPanel,
+#lessonHint,#lessonTarget,#recording,#onboardRec,
+#mediaBadge,#mobileButtons{
+  opacity:var(--hud-opacity,1)}
+
+/* ═══ WAVE 9.5: Режим перетаскивания ═══ */
+.hs-drag-row{
+  display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-bottom:6px}
+#hudSettings .hs-drag-toggle{
+  padding:8px 10px;font-family:inherit;font-size:11.5px;font-weight:700;
+  letter-spacing:1px;
+  background:linear-gradient(135deg,rgba(0,80,140,0.9),rgba(0,40,90,0.9));
+  color:#00e5ff;border:1px solid #00e5ff;border-radius:6px;cursor:pointer;
+  transition:all 0.15s}
+#hudSettings .hs-drag-toggle:hover{
+  background:linear-gradient(135deg,rgba(0,140,200,0.9),rgba(0,80,140,0.9))}
+#hudSettings .hs-drag-toggle.active{
+  background:linear-gradient(135deg,rgba(255,170,0,0.9),rgba(150,100,0,0.9));
+  color:#fff;border-color:#ffcc44;box-shadow:0 0 12px rgba(255,204,68,0.6)}
+#hudSettings .hs-drag-reset{
+  padding:8px 10px;font-family:inherit;font-size:11.5px;font-weight:700;
+  background:rgba(60,0,15,0.7);color:#ff8888;border:1px solid #ff6666;
+  border-radius:6px;cursor:pointer;transition:all 0.15s}
+#hudSettings .hs-drag-reset:hover{background:rgba(100,20,30,0.9);color:#fff}
+#hudSettings .hs-drag-hint{
+  font-size:10px;color:#5a8a9a;letter-spacing:0.5px;margin-top:2px;line-height:1.4}
+
+/* Когда drag-mode — подсветка всех draggable элементов */
+body.hud-drag-mode #topright,
+body.hud-drag-mode #miniHud,
+body.hud-drag-mode #compass,
+body.hud-drag-mode #attitude,
+body.hud-drag-mode #flightMode,
+body.hud-drag-mode #flightTimer,
+body.hud-drag-mode #minimap,
+body.hud-drag-mode #homeArrow,
+body.hud-drag-mode #camPanel,
+body.hud-drag-mode #stickIndicator{
+  outline:2px dashed rgba(255,204,68,0.85);
+  outline-offset:3px;
+  cursor:move !important;
+  touch-action:none !important;
+  z-index:200 !important;
+  box-shadow:0 0 20px rgba(255,204,68,0.4)}
+body.hud-drag-mode #topright *,
+body.hud-drag-mode #miniHud *,
+body.hud-drag-mode #compass *,
+body.hud-drag-mode #attitude *,
+body.hud-drag-mode #minimap *,
+body.hud-drag-mode #camPanel *,
+body.hud-drag-mode #stickIndicator *{
+  pointer-events:none}
+body.hud-drag-mode #camPanel button{pointer-events:none}
+
+/* Плавный drag — не тормозит GPU */
+body.hud-drag-mode #topright,
+body.hud-drag-mode #miniHud,
+body.hud-drag-mode #compass,
+body.hud-drag-mode #attitude,
+body.hud-drag-mode #flightMode,
+body.hud-drag-mode #flightTimer,
+body.hud-drag-mode #minimap,
+body.hud-drag-mode #homeArrow,
+body.hud-drag-mode #camPanel,
+body.hud-drag-mode #stickIndicator{
+  will-change:transform,left,top}
+
+/* ═══ WAVE B: СХЕМЫ УПРАВЛЕНИЯ ═══ */
+#hudSettings .scheme-picker{
+  display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+#hudSettings .scheme-btn{
+  padding:8px 10px;font-family:inherit;font-size:11px;font-weight:700;
+  letter-spacing:0.5px;text-align:left;
+  background:rgba(0,20,45,0.6);color:#88c8e0;
+  border:1px solid rgba(0,229,255,0.25);border-radius:6px;cursor:pointer;
+  transition:all 0.15s;line-height:1.35}
+#hudSettings .scheme-btn:hover{
+  background:rgba(0,50,90,0.75);border-color:rgba(0,229,255,0.7);color:#fff}
+#hudSettings .scheme-btn.active{
+  background:linear-gradient(135deg,rgba(0,120,180,0.85),rgba(0,60,120,0.85));
+  border-color:#00e5ff;color:#fff;box-shadow:0 0 10px rgba(0,229,255,0.4)}
+#hudSettings .scheme-btn .sb-name{font-size:12.5px;color:#00e5ff;display:block;margin-bottom:2px}
+#hudSettings .scheme-btn.active .sb-name{color:#fff}
+#hudSettings .scheme-btn .sb-sub{font-size:9.5px;color:#5a7a9a;display:block;line-height:1.3}
+#hudSettings .scheme-btn.active .sb-sub{color:#c8e0f0}
+#hudSettings .ctrl-row{
+  display:flex;align-items:center;gap:8px;margin:5px 0;
+  font-size:11.5px}
+#hudSettings .ctrl-lbl{color:#88c8e0;min-width:88px;font-weight:600}
+#hudSettings .ctrl-row input[type=range]{
+  flex:1;height:5px;-webkit-appearance:none;appearance:none;
+  background:linear-gradient(90deg,rgba(0,229,255,0.15),#00e5ff);
+  border-radius:3px;outline:none;cursor:pointer}
+#hudSettings .ctrl-row input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:14px;height:14px;background:#00e5ff;border:2px solid #fff;
+  border-radius:50%;box-shadow:0 0 8px #00e5ff;cursor:pointer}
+#hudSettings .ctrl-val{
+  color:#fff;font-weight:700;font-family:Consolas;
+  min-width:44px;text-align:right;font-size:11px}
+body.is-mobile #hudSettings .scheme-picker{grid-template-columns:1fr}
+  /* ═══ WAVE 9.6: Видео-профиль ═══ */
+body.hud-video-mode #cinemaBars{display:block !important}
+body.hud-video-mode #miniHud{
+  top:auto !important;bottom:20px !important;
+  background:transparent !important;
+  border:none !important;
+  box-shadow:none !important;
+  font-size:13px}
+
+/* ═══ WAVE 9: Настройки HUD ═══ */
+#hudSettings{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  display:none;z-index:180;
+  padding:20px 24px;
+  background:linear-gradient(135deg,rgba(8,15,30,0.98),rgba(2,5,15,0.98));
+  border:1px solid rgba(0,229,255,0.5);
+  border-radius:12px;
+  min-width:420px;max-width:94vw;max-height:90vh;overflow-y:auto;
+  box-shadow:0 0 80px rgba(0,229,255,0.3),0 30px 80px rgba(0,0,0,0.8);
+  color:#c8e0f0;font-size:12.5px;
+  touch-action:auto}
+#hudSettings h3{
+  color:#00e5ff;font-size:13px;letter-spacing:4px;text-align:center;
+  margin:0 0 14px;padding-bottom:10px;font-weight:700;
+  border-bottom:1px solid rgba(0,229,255,0.25)}
+#hudSettings .hs-section{
+  margin-bottom:12px;padding:10px 12px;
+  background:rgba(0,15,35,0.5);
+  border:1px solid rgba(0,229,255,0.18);
+  border-radius:8px}
+#hudSettings .hs-section-title{
+  color:#00e5ff;font-size:10px;letter-spacing:2.5px;font-weight:700;
+  margin-bottom:8px;padding-bottom:5px;
+  border-bottom:1px solid rgba(0,229,255,0.15)}
+#hudSettings .hs-opacity-row{
+  display:flex;align-items:center;gap:10px}
+#hudSettings .hs-opacity-ico{font-size:16px;flex-shrink:0}
+#hudSettings .hs-opacity-row input[type=range]{
+  flex:1;height:6px;-webkit-appearance:none;appearance:none;
+  background:linear-gradient(90deg,rgba(0,229,255,0.15),#00e5ff);
+  border-radius:3px;outline:none;cursor:pointer}
+#hudSettings .hs-opacity-row input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:16px;height:16px;background:#00e5ff;border:2px solid #fff;
+  border-radius:50%;box-shadow:0 0 8px #00e5ff;cursor:pointer}
+#hudSettings .hs-opacity-val{
+  color:#fff;font-weight:700;font-family:Consolas;
+  min-width:44px;text-align:right;font-size:11.5px}
+#hudSettings .hs-btns-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:5px}
+#hudSettings .hs-btn-item{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 8px;
+  background:rgba(0,20,45,0.55);
+  border:1px solid rgba(0,229,255,0.18);
+  border-radius:5px;
+  cursor:pointer;
+  font-size:11px;
+  transition:all 0.15s;
+  user-select:none}
+#hudSettings .hs-btn-item:hover{
+  background:rgba(0,50,90,0.7);border-color:rgba(0,229,255,0.6)}
+#hudSettings .hs-btn-item input[type=checkbox]{
+  width:13px;height:13px;accent-color:#00e5ff;cursor:pointer;flex-shrink:0}
+#hudSettings .hs-btn-item span{
+  flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hudSettings .hs-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
+#hudSettings .hs-item{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 10px;
+  background:rgba(0,20,45,0.55);
+  border:1px solid rgba(0,229,255,0.2);
+  border-radius:6px;
+  cursor:pointer;
+  transition:all 0.15s;
+  user-select:none}
+#hudSettings .hs-item:hover{
+  background:rgba(0,50,90,0.7);
+  border-color:rgba(0,229,255,0.6)}
+#hudSettings .hs-item input[type=checkbox]{
+  width:14px;height:14px;accent-color:#00e5ff;cursor:pointer;flex-shrink:0}
+#hudSettings .hs-item span{flex:1;font-size:11.5px;line-height:1.3}
+#hudSettings .hs-actions{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
+  padding-top:12px;border-top:1px solid rgba(0,229,255,0.2)}
+#hudSettings .hs-actions button{
+  padding:9px;font-family:inherit;font-size:11.5px;font-weight:700;
+  letter-spacing:1px;
+  background:linear-gradient(135deg,rgba(0,80,140,0.9),rgba(0,40,90,0.9));
+  color:#00e5ff;border:1px solid #00e5ff;border-radius:6px;cursor:pointer;
+  transition:all 0.15s}
+#hudSettings .hs-actions button:hover{
+  background:linear-gradient(135deg,rgba(0,140,200,0.9),rgba(0,80,140,0.9))}
+#hudSettings .hs-actions button.close{
+  grid-column:1 / -1;
+  color:#ff8888;border-color:#ff6666;
+  background:rgba(50,0,15,0.6)}
+
+/* Скрытие отдельных элементов по классам */
+body.hud-hide-topright #topright{display:none !important}
+body.hud-hide-miniHud #miniHud{display:none !important}
+body.hud-hide-compass #compass{display:none !important}
+body.hud-hide-attitude #attitude{display:none !important}
+body.hud-hide-flightMode #flightMode{display:none !important}
+body.hud-hide-flightTimer #flightTimer{display:none !important}
+body.hud-hide-envPanel #envPanel{display:none !important}
+body.hud-hide-timeSlider #timeSlider{display:none !important}
+body.hud-hide-minimap #minimap{display:none !important}
+body.hud-hide-homeArrow #homeArrow,
+body.hud-hide-homeArrow #homeDistance{display:none !important}
+body.hud-hide-stickIndicator #stickIndicator{display:none !important}
+body.hud-hide-mobileButtons #mobileButtons{display:none !important}
+body.hud-hide-camPanel #camPanel{display:none !important}
+body.hud-hide-crosshair #crosshair{display:none !important}
+body.hud-hide-warnings #warnings{display:none !important}
+body.hud-hide-damageIndicator #damageIndicator{display:none !important}
+
+/* На мобиле — 1 колонка */
+body.is-mobile #hudSettings{min-width:0;width:calc(100vw - 16px);padding:16px 18px}
+body.is-mobile #hudSettings .hs-grid{grid-template-columns:1fr}
+body.is-mobile #hudSettings .hs-btns-grid{grid-template-columns:1fr}
+body.is-mobile #hudSettings .hs-actions{grid-template-columns:repeat(2,1fr)}
+
+/* ═══ WAVE Мобильная оптимизация: убираем blur на low-end ═══ */
+body.is-lowend .glass,
+body.is-lowend .modal-wrap,
+body.is-lowend #menu,
+body.is-lowend .env-btn,
+body.is-lowend #topright button,
+body.is-lowend .mode-card,
+body.is-lowend .world-card,
+body.is-lowend .model-chip{
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+}
+body.is-lowend #motionBlur{
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  display:none !important;
+}
+/* На мобиле отключаем тяжёлые анимации фона меню */
+body.is-mobile #menu .bg-scan{animation-duration:24s}
+body.is-mobile #menu .bg-beam{animation-duration:14s}
+body.is-lowend #menu .bg-scan,
+body.is-lowend #menu .bg-beam,
+body.is-lowend #menu .bg-grid{display:none !important}
+/* Класс для мобилы — компактнее карточки моделей */
+body.is-mobile #modelSelector{grid-template-columns:repeat(3,1fr)}
+body.is-mobile .hero-human{display:none}
+
+/* ═══════════════════════════════════════════════════════════
+   БЛОК 5 — МОБИЛЬНАЯ АДАПТАЦИЯ UI
+   ═══════════════════════════════════════════════════════════ */
+
+/* ═══ 5.1 Topright — компактнее, с переносом ═══ */
+body.is-mobile #topright{
+  top:10px;right:10px;
+  gap:4px;
+  max-width:calc(100vw - 20px);
+  flex-wrap:wrap;
+  justify-content:flex-end}
+body.is-mobile #topright button{width:34px;height:34px;font-size:13px}
+body.is-lowend #topright button{width:30px;height:30px;font-size:12px}
+
+/* ═══ 5.2 Mini-HUD — вторая строка, компактнее ═══ */
+body.is-mobile #miniHud{
+  top:56px;
+  gap:6px;
+  padding:5px 10px;
+  font-size:10px;
+  max-width:calc(100vw - 16px)}
+body.is-mobile #miniHud .m-item{font-size:10px;gap:3px}
+body.is-mobile #miniHud .m-sep{height:10px}
+body.is-mobile #miniHud .m-mode{
+  font-size:9px;padding:1px 6px;letter-spacing:1px}
+
+/* ═══ 5.3 FlightMode / Compass / Timer ═══ */
+body.is-mobile #flightMode{
+  padding:4px 12px;font-size:10px;letter-spacing:2px;top:8px}
+body.is-mobile #compass{
+  width:min(90vw,280px);top:88px;height:22px}
+body.is-mobile #flightTimer{top:114px;font-size:10.5px;padding:3px 10px}
+body.is-mobile #geofenceUI{top:142px;font-size:10px;padding:5px 10px}
+body.is-mobile #blackboxDot{top:74px}
+
+/* ═══ 5.4 Weather / Season — разносим от центра ═══ */
+body.is-mobile #weatherInd,
+body.is-mobile #seasonInd{
+  top:88px;font-size:10px;padding:3px 8px}
+body.is-mobile #weatherInd{transform:translateX(-50%) translateX(-70px)}
+body.is-mobile #seasonInd{transform:translateX(-50%) translateX(70px)}
+body.is-mobile #timeSlider{top:130px;padding:4px 8px;font-size:10px}
+body.is-mobile #timeSlider input[type=range]{width:70px}
+
+/* ═══ 5.5 Attitude — меньше, ниже ═══ */
+body.is-mobile #attitude{width:88px;height:88px;bottom:10px}
+
+/* ═══ 5.6 StickIndicator — скрыть (есть джойстики) ═══ */
+body.is-mobile #stickIndicator{display:none !important}
+
+/* ═══ 5.7 CamPanel — переносим вверх, чтобы не мешать джойстику ═══ */
+body.is-mobile #camPanel{left:8px;bottom:auto;top:170px}
+body.is-mobile #camPanel button{width:32px;height:32px;font-size:12px}
+body.is-mobile #camLabel{font-size:9.5px;padding:3px 8px;letter-spacing:1px}
+
+/* ═══ 5.8 Minimap — компактнее ═══ */
+body.is-mobile #minimap{width:130px;height:130px;top:128px;right:8px}
+
+/* ═══ 5.9 PiP — в левый верхний угол ═══ */
+body.is-mobile #pipWrap{
+  width:160px;height:90px;
+  right:auto;left:8px;top:220px;bottom:auto}
+
+/* ═══ 5.10 Back button ═══ */
+body.is-mobile #back{
+  margin-top:52px;padding:7px 14px;font-size:11px;letter-spacing:0.5px}
+
+/* ═══ 5.11 MobileControls — джойстики компактнее ═══ */
+body.is-mobile #mobileControls{padding:0 12px;bottom:12px}
+body.is-mobile .joystick{width:100px;height:100px}
+body.is-mobile .joystick .knob{width:42px;height:42px}
+body.is-mobile .joystick .label{font-size:9px;top:-18px}
+
+/* ═══ 5.12 MobileButtons ═══ */
+body.is-mobile #mobileButtons{top:70px;right:10px;gap:6px}
+body.is-mobile #mobileButtons button{width:42px;height:42px;font-size:14px}
+
+/* ═══ 5.13 Модалки и все панели — на всю ширину ═══ */
+body.is-mobile .modal-card,
+body.is-mobile #mixerPanel,
+body.is-mobile #recPanel,
+body.is-mobile #replayPanel,
+body.is-mobile #photoPanel,
+body.is-mobile #voicePanel,
+body.is-mobile #panelManager,
+body.is-mobile #anatomyPanel,
+body.is-mobile #pidTuner,
+body.is-mobile #flightCalc,
+body.is-mobile #failureSim,
+body.is-mobile #crashCase,
+body.is-mobile #certificateModal,
+body.is-mobile #regulations,
+body.is-mobile #infPanel,
+body.is-mobile #sensorPanel,
+body.is-mobile #physExtra,
+body.is-mobile #damageIndicator,
+body.is-mobile #apPanel,
+body.is-mobile #quizScore,
+body.is-mobile #gameModePanel{
+  min-width:0;
+  width:calc(100vw - 16px);
+  max-width:calc(100vw - 16px);
+  max-height:calc(100vh - 16px);
+}
+
+/* ═══ 5.14 Шрифты и паддинги в карточках ═══ */
+body.is-mobile .modal-card{padding:18px 18px 14px}
+body.is-mobile .modal-card h2{font-size:18px;letter-spacing:3px;margin-bottom:14px}
+body.is-mobile .modal-close{padding:11px;font-size:12px;letter-spacing:1px;margin-top:14px}
+body.is-mobile .cls-btn,
+body.is-mobile .lvl-btn,
+body.is-mobile .uav-btn{
+  padding:12px 14px;font-size:13px;margin:7px 0;gap:10px}
+body.is-mobile .cls-btn small,
+body.is-mobile .lvl-btn small,
+body.is-mobile .uav-btn small{font-size:10.5px}
+body.is-mobile .cls-btn .ico,
+body.is-mobile .lvl-btn .ico,
+body.is-mobile .uav-btn .ico{font-size:17px;width:24px}
+
+/* ═══ 5.15 QuizCard ═══ */
+body.is-mobile #quizCard h3{font-size:16px;margin-bottom:16px}
+body.is-mobile #quizCard .opt{padding:12px 16px;font-size:13.5px;margin:8px 0}
+body.is-mobile #quizCard .opt .letter{
+  width:28px;height:28px;min-width:28px;font-size:12px;margin-right:10px}
+body.is-mobile #quizFact{font-size:12px;padding:12px 14px;margin-top:14px}
+body.is-mobile #quizContinue{padding:11px;font-size:13px}
+
+/* ═══ 5.16 Certificate ═══ */
+body.is-mobile #certificateModal{padding:22px 18px}
+body.is-mobile #certificateModal .cert-title{font-size:24px;letter-spacing:6px}
+body.is-mobile #certificateModal .cert-name{font-size:16px;letter-spacing:1.5px}
+body.is-mobile #certificateModal .cert-text{font-size:12px}
+
+/* ═══ 5.17 #panelManager — 2 колонки ═══ */
+body.is-mobile #panelManager{padding:14px 16px}
+body.is-mobile #panelManager .pm-grid{grid-template-columns:repeat(2,1fr);gap:6px}
+body.is-mobile #panelManager .pm-item{padding:8px 10px;font-size:11px;gap:8px}
+body.is-mobile #panelManager .pm-key{width:22px;height:20px;font-size:9px}
+body.is-mobile #panelManager h3{font-size:12px;letter-spacing:3px;margin-bottom:12px}
+
+/* ═══ 5.18 MixerPanel — компактнее ═══ */
+body.is-mobile #mixerPanel{padding:16px 16px 14px}
+body.is-mobile #mixerPanel h3{font-size:12px;letter-spacing:3px;margin-bottom:12px}
+body.is-mobile #mixerPanel .mx-themes{grid-template-columns:repeat(2,1fr)}
+body.is-mobile #mixerPanel .mx-lbl,
+body.is-mobile #mixerPanel .mx-lbl-sm{min-width:52px;font-size:11px}
+
+/* ═══ 5.19 VoicePanel / RecPanel / PhotoPanel / ReplayPanel ═══ */
+body.is-mobile #voicePanel{padding:10px 12px}
+body.is-mobile #recPanel{padding:10px 14px}
+body.is-mobile #recPanel .rec-hint{display:none}
+body.is-mobile #photoPanel{padding:10px 14px}
+body.is-mobile #photoPanel .pp-hint{display:none}
+body.is-mobile #replayPanel{padding:10px 14px;bottom:auto;top:180px}
+
+/* ═══ 5.20 Главное меню — компактнее ═══ */
+body.is-mobile #menu{padding:18px 12px 28px}
+body.is-mobile .menu-hero{gap:12px;margin-bottom:16px}
+body.is-mobile .hero-title,
+body.is-mobile .hero-title-wrap::before,
+body.is-mobile .hero-title-wrap::after{
+  font-size:46px;letter-spacing:7px}
+body.is-mobile .hero-tag{font-size:8.5px;letter-spacing:2.5px;padding:3px 10px}
+body.is-mobile .hero-sub{font-size:10.5px;letter-spacing:2.5px}
+body.is-mobile .hero-meta{font-size:9.5px;letter-spacing:2px}
+body.is-mobile .hero-underline{width:min(240px,55vw);margin:10px auto}
+body.is-mobile #menu .corner{width:36px;height:36px;opacity:0.5}
+body.is-mobile #menu .hud-line{font-size:8px;letter-spacing:2px}
+
+/* ═══ 5.21 QuickStart ═══ */
+body.is-mobile .quickStart{
+  flex-direction:column;gap:8px;margin:0 auto 22px}
+body.is-mobile .qs-btn{padding:12px 16px;gap:10px}
+body.is-mobile .qs-btn .qs-ico{font-size:20px;width:26px}
+body.is-mobile .qs-btn .qs-title{font-size:12.5px}
+body.is-mobile .qs-btn .qs-sub{font-size:9.5px;letter-spacing:1px}
+
+/* ═══ 5.22 Sec-block заголовки ═══ */
+body.is-mobile .sec-block{margin-bottom:22px}
+body.is-mobile .sec-title{font-size:10px;letter-spacing:3px}
+body.is-mobile .sec-sub{font-size:9.5px;letter-spacing:1px}
+body.is-mobile .sec-head{gap:10px;margin-bottom:10px}
+
+/* ═══ 5.23 Сетки: локации, модели, режимы ═══ */
+body.is-mobile #modelSelector{grid-template-columns:repeat(3,1fr);gap:6px}
+body.is-mobile .model-chip{min-height:78px;padding:10px 6px 8px}
+body.is-mobile .model-chip .chip-icon{font-size:24px;margin-bottom:4px}
+body.is-mobile .model-chip .chip-name{font-size:10px}
+
+body.is-mobile .worlds-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+body.is-mobile .world-card{min-height:100px;padding:14px 8px 12px}
+body.is-mobile .world-card .w-icon{font-size:30px;margin-bottom:6px}
+body.is-mobile .world-card .w-name{font-size:11.5px}
+body.is-mobile .world-card .w-tag{font-size:8.5px;letter-spacing:1px}
+
+body.is-mobile .modes-grid{grid-template-columns:1fr;gap:8px}
+body.is-mobile .mode-card{padding:12px 14px;gap:10px}
+body.is-mobile .mode-card .m-icon{font-size:20px}
+body.is-mobile .mode-card .m-title{font-size:12.5px}
+body.is-mobile .mode-card .m-desc{font-size:10px}
+
+body.is-mobile .edu-menu-btns{grid-template-columns:1fr 1fr;gap:8px}
+body.is-mobile .edu-menu-btn{padding:10px 8px;font-size:10.5px;letter-spacing:1px;gap:6px}
+body.is-mobile .edu-menu-btn .eb-ico{font-size:14px}
+
+/* ═══ 5.24 Stats box ═══ */
+body.is-mobile .menu-stats{gap:8px;margin-top:20px}
+body.is-mobile .stat-box{min-width:auto;padding:8px 12px;gap:8px}
+body.is-mobile .stat-icon-wrap{width:34px;height:34px}
+body.is-mobile .stat-icon{font-size:16px}
+body.is-mobile .stat-label{font-size:8.5px;letter-spacing:1.5px}
+body.is-mobile .stat-value{font-size:12px}
+
+/* ═══ 5.25 Тост / Достижение ═══ */
+body.is-mobile #toast{font-size:14px;padding:14px 22px;max-width:88vw}
+body.is-mobile #achievementPopup{padding:14px 24px}
+body.is-mobile #achievementPopup .name{font-size:18px}
+body.is-mobile #achievementPopup .desc{font-size:11px}
+body.is-mobile #achievementPopup .title{font-size:9.5px;letter-spacing:2.5px}
+
+/* ═══ 5.26 LessonHint — над джойстиками ═══ */
+body.is-mobile #lessonHint{
+  bottom:auto;top:170px;
+  font-size:12px;padding:10px 18px;letter-spacing:0.5px}
+
+/* ═══ 5.27 HUD (F12) — компактнее ═══ */
+body.is-mobile #hud{
+  font-size:10.5px;padding:8px 10px;
+  min-width:0;max-width:calc(100vw - 90px);
+  line-height:1.45}
+
+/* ═══ 5.28 perfIndicator / autopilot / warnings ═══ */
+body.is-mobile #perfIndicator{top:auto;bottom:120px;left:10px;font-size:9.5px;padding:3px 8px}
+body.is-mobile #autopilotInd{font-size:11px;padding:5px 14px}
+body.is-mobile #warnings{top:22%}
+body.is-mobile .warn-badge{padding:9px 20px;font-size:11.5px;letter-spacing:2.5px}
+
+/* ═══ 5.29 Тач-оптимизация кликов ═══ */
+body.is-mobile .env-btn,
+body.is-mobile #topright button,
+body.is-mobile .qs-btn,
+body.is-mobile .model-chip,
+body.is-mobile .world-card,
+body.is-mobile .mode-card,
+body.is-mobile .edu-menu-btn,
+body.is-mobile .pm-item,
+body.is-mobile .cls-btn,
+body.is-mobile .lvl-btn,
+body.is-mobile .uav-btn{
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+}
+
+/* ═══ 5.30 Safe-area (iPhone notch) ═══ */
+@supports(padding:env(safe-area-inset-top)){
+  body.is-mobile #topright{top:calc(10px + env(safe-area-inset-top))}
+  body.is-mobile #miniHud{top:calc(56px + env(safe-area-inset-top))}
+  body.is-mobile #mobileControls{bottom:calc(12px + env(safe-area-inset-bottom))}
+  body.is-mobile #flightMode{top:calc(8px + env(safe-area-inset-top))}
+  body.is-mobile #compass{top:calc(88px + env(safe-area-inset-top))}
+}
+
+/* ═══ 5.31 Landscape-телефон: 2 колонки где можно ═══ */
+@media(max-height:520px) and (orientation:landscape){
+  body.is-mobile #miniHud{top:46px;gap:5px}
+  body.is-mobile #compass{top:80px}
+  body.is-mobile .joystick{width:88px;height:88px}
+  body.is-mobile .joystick .knob{width:36px;height:36px}
+  body.is-mobile .modal-card{max-height:calc(100vh - 10px)}
+}
 </style>
 </head>
 <body>
@@ -1468,72 +2249,73 @@ body.photo-mode #photoPanel{cursor:default}
   <div class="corner bl"><svg viewBox="0 0 64 64"><path d="M2 18 L2 2 L18 2 M2 2 L20 20" stroke="#b366ff" stroke-width="2" fill="none"/><circle cx="8" cy="8" r="1.5" fill="#ff66cc"/></svg></div>
   <div class="corner br"><svg viewBox="0 0 64 64"><path d="M2 18 L2 2 L18 2 M2 2 L20 20" stroke="#b366ff" stroke-width="2" fill="none"/><circle cx="8" cy="8" r="1.5" fill="#ff66cc"/></svg></div>
   <div class="hud-line l">SYS · <span>ONLINE</span></div>
-  <div class="hud-line r">v23.0 · <span>MMXXV</span></div>
+  <div class="hud-line r">FLIGHT LAB · <span>MMXXVI</span></div>
   <div class="hud-line bl-l">LAT 55.7558 · LON 37.6173</div>
   <div class="hud-line bl-r">MODE · <span>READY</span></div>
 
   <div class="menu-hero">
-    <div class="hero-human">
-      <svg viewBox="0 0 180 280" class="bob">
-        <ellipse cx="90" cy="240" rx="60" ry="8" fill="none" stroke="rgba(0,229,255,0.3)" stroke-width="1"/>
-        <ellipse cx="90" cy="240" rx="40" ry="5" fill="none" stroke="rgba(0,229,255,0.5)" stroke-width="1"/>
-        <line x1="78" y1="220" x2="70" y2="260" stroke="#00e5ff" stroke-width="3" stroke-linecap="round"/>
-        <line x1="102" y1="220" x2="110" y2="260" stroke="#00e5ff" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="70" cy="262" r="4" fill="#00e5ff"/>
-        <circle cx="110" cy="262" r="4" fill="#00e5ff"/>
-        <path d="M 70 130 Q 70 120 90 120 Q 110 120 110 130 L 108 220 Q 108 226 90 226 Q 72 226 72 220 Z" fill="none" stroke="#00e5ff" stroke-width="2.5"/>
-        <line x1="90" y1="130" x2="90" y2="220" stroke="rgba(0,229,255,0.35)" stroke-width="1"/>
-        <rect x="80" y="150" width="20" height="14" rx="2" fill="none" stroke="rgba(0,255,204,0.7)" stroke-width="1.5"/>
-        <text x="90" y="161" font-family="Consolas" font-size="7" fill="#00ffcc" text-anchor="middle">A·23</text>
-        <circle cx="68" cy="140" r="5" fill="none" stroke="#00e5ff" stroke-width="2"/>
-        <circle cx="112" cy="140" r="5" fill="none" stroke="#00e5ff" stroke-width="2"/>
-        <line x1="68" y1="140" x2="50" y2="180" stroke="#00e5ff" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="50" cy="180" r="4" fill="#00e5ff"/>
-        <line x1="112" y1="140" x2="130" y2="170" stroke="#00e5ff" stroke-width="3" stroke-linecap="round"/>
-        <line x1="130" y1="170" x2="118" y2="195" stroke="#00e5ff" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="118" cy="195" r="4" fill="#00e5ff"/>
-        <g transform="translate(105,190)">
-          <rect x="0" y="0" width="40" height="28" rx="3" fill="rgba(0,20,40,0.85)" stroke="#00e5ff" stroke-width="2"/>
-          <rect x="6" y="5" width="28" height="8" rx="1" fill="rgba(0,255,204,0.15)" stroke="#00ffcc" stroke-width="0.8"/>
-          <text x="20" y="12" font-family="Consolas" font-size="5" fill="#00ffcc" text-anchor="middle">AETHER</text>
-          <circle cx="10" cy="20" r="4" fill="none" stroke="#00e5ff" stroke-width="1.3"/>
-          <circle cx="10" cy="20" r="1.5" fill="#00ffcc"/>
-          <circle cx="30" cy="20" r="4" fill="none" stroke="#00e5ff" stroke-width="1.3"/>
-          <circle cx="30" cy="20" r="1.5" fill="#ff66cc"/>
-          <circle cx="20" cy="20" r="1.3" class="led"/>
+    <div class="hero-emblem">
+      <svg viewBox="0 0 200 200" class="emblem-svg">
+        <!-- Вращающееся внешнее кольцо (компас) -->
+        <g class="emblem-ring">
+          <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(0,229,255,0.18)" stroke-width="1"/>
+          <circle cx="100" cy="100" r="80" fill="none" stroke="rgba(0,229,255,0.35)" stroke-width="1.5" stroke-dasharray="3 6"/>
+          <!-- 4 стороны света -->
+          <line x1="100" y1="12" x2="100" y2="22" stroke="#00ffcc" stroke-width="2"/>
+          <line x1="100" y1="178" x2="100" y2="188" stroke="rgba(0,229,255,0.4)" stroke-width="1.5"/>
+          <line x1="12" y1="100" x2="22" y2="100" stroke="rgba(0,229,255,0.4)" stroke-width="1.5"/>
+          <line x1="178" y1="100" x2="188" y2="100" stroke="rgba(0,229,255,0.4)" stroke-width="1.5"/>
         </g>
-        <g transform="translate(145,175)">
-          <line x1="0" y1="0" x2="0" y2="-25" stroke="#00ffcc" stroke-width="1.5"/>
-          <circle cx="0" cy="-25" r="2.5" class="ant"/>
+
+        <!-- Внутренний ромб-кузница с молнией -->
+        <g class="emblem-core">
+          <polygon points="100,50 150,100 100,150 50,100" fill="rgba(0,20,45,0.6)" stroke="#00e5ff" stroke-width="1.8"/>
+          <polygon points="100,66 132,100 100,134 68,100" fill="none" stroke="rgba(0,255,204,0.55)" stroke-width="1"/>
+          <!-- Молния (стилизованное «пламя кузни» + намёк на «S») -->
+          <path d="M 92 68 L 78 100 L 96 100 L 84 132 L 122 96 L 104 96 L 112 68 Z"
+                fill="url(#skyfg)" stroke="#00ffcc" stroke-width="0.6" stroke-linejoin="round" class="emblem-bolt"/>
         </g>
-        <circle cx="90" cy="100" r="22" fill="rgba(0,20,40,0.7)" stroke="#00e5ff" stroke-width="2.5"/>
-        <path d="M 74 98 Q 90 90 106 98 L 104 108 Q 90 112 76 108 Z" fill="rgba(0,229,255,0.15)" stroke="#00ffcc" stroke-width="1.3"/>
-        <line x1="74" y1="103" x2="106" y2="103" stroke="#00ffcc" stroke-width="0.8" stroke-dasharray="3 2"/>
-        <line x1="76" y1="102" x2="104" y2="102" stroke="#00ffcc" stroke-width="1.2" class="scan" stroke-dasharray="20 60"/>
-        <line x1="90" y1="122" x2="90" y2="128" stroke="#00e5ff" stroke-width="1.5"/>
-        <circle cx="90" cy="129" r="2" fill="#00ffcc"/>
-        <path d="M 68 100 Q 62 100 62 106 Q 62 112 68 112" fill="none" stroke="#00e5ff" stroke-width="2"/>
-        <path d="M 112 100 Q 118 100 118 106 Q 118 112 112 112" fill="none" stroke="#00e5ff" stroke-width="2"/>
-        <circle cx="90" cy="100" r="30" fill="none" stroke="rgba(0,229,255,0.2)" stroke-width="0.8" stroke-dasharray="2 4"/>
-        <g transform="translate(150,60)">
-          <ellipse cx="0" cy="0" rx="12" ry="4" fill="none" stroke="rgba(0,255,204,0.7)" stroke-width="1.3"/>
-          <circle cx="-8" cy="-3" r="2.5" fill="none" stroke="#00ffcc" stroke-width="1"/>
-          <circle cx="8" cy="-3" r="2.5" fill="none" stroke="#00ffcc" stroke-width="1"/>
-          <circle cx="0" cy="1" r="1.5" fill="#00ffcc"/>
-          <line x1="0" y1="1" x2="0" y2="8" stroke="rgba(0,255,204,0.5)" stroke-width="0.8" stroke-dasharray="1 2"/>
+
+        <!-- Пульсация центра -->
+        <circle cx="100" cy="100" r="3" fill="#00ffcc" class="emblem-core-dot"/>
+        <circle cx="100" cy="100" r="10" fill="none" stroke="rgba(0,255,204,0.5)" stroke-width="1" class="emblem-core-pulse"/>
+
+        <!-- 4 винта по углам (квадрокоптер сверху) -->
+        <g class="emblem-props">
+          <circle cx="60" cy="60" r="7" fill="none" stroke="rgba(0,229,255,0.6)" stroke-width="1.2"/>
+          <circle cx="140" cy="60" r="7" fill="none" stroke="rgba(0,229,255,0.6)" stroke-width="1.2"/>
+          <circle cx="60" cy="140" r="7" fill="none" stroke="rgba(0,229,255,0.6)" stroke-width="1.2"/>
+          <circle cx="140" cy="140" r="7" fill="none" stroke="rgba(0,229,255,0.6)" stroke-width="1.2"/>
+          <line x1="53" y1="60" x2="67" y2="60" stroke="#00ffcc" stroke-width="1.5" class="prop-rot"/>
+          <line x1="133" y1="60" x2="147" y2="60" stroke="#00ffcc" stroke-width="1.5" class="prop-rot"/>
+          <line x1="53" y1="140" x2="67" y2="140" stroke="#00ffcc" stroke-width="1.5" class="prop-rot"/>
+          <line x1="133" y1="140" x2="147" y2="140" stroke="#00ffcc" stroke-width="1.5" class="prop-rot"/>
         </g>
+
+        <!-- Градиент для молнии -->
+        <defs>
+          <linearGradient id="skyfg" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#a8f0ff"/>
+            <stop offset="50%" stop-color="#00d4ff"/>
+            <stop offset="100%" stop-color="#b366ff"/>
+          </linearGradient>
+        </defs>
       </svg>
     </div>
     <div class="hero-content">
-      <div class="hero-tag"><span class="dot-pulse"></span>AETHER FLIGHT LAB<span class="sep">·</span>URBAN TIGRAN<span class="sep">·</span>v23</div>
-      <div class="hero-title-wrap"><h1 class="hero-title">AETHER</h1></div>
+      <div class="hero-tag">
+        <span class="dot-pulse"></span>FLIGHT LAB
+        <span class="sep">·</span>URBAN TIGRAN
+        <span class="sep">·</span>PREMIUM
+      </div>
+      <div class="hero-title-wrap"><h1 class="hero-title" data-text="SKYFORGE">SKYFORGE</h1></div>
       <div class="hero-underline"></div>
-      <div class="hero-sub">Лаборатория моделирования полёта БПЛА</div>
-      <div class="hero-meta">12 миров · 8 режимов · <b>6 погод</b> · <b>4 сезона</b> · <b>200</b> уроков</div>
+      <div class="hero-sub">Кузница неба · Симулятор БПЛА</div>
+      <div class="hero-meta">12 миров · 8 режимов · <b>6</b> погод · <b>4</b> сезона · <b>200</b> уроков</div>
     </div>
   </div>
 
-  <!-- WAVE 4: Быстрый старт -->
+  <!-- WAVE C: Быстрый старт -->
   <div class="quickStart">
     <button class="qs-btn primary" onclick="startScene('free')">
       <span class="qs-ico">▶</span>
@@ -1541,6 +2323,7 @@ body.photo-mode #photoPanel{cursor:default}
         <span class="qs-title">Свободный полёт</span>
         <span class="qs-sub">Парящие острова · ANGLE</span>
       </span>
+      <span class="qs-arrow">›</span>
     </button>
     <button class="qs-btn" onclick="startScene('tutorial')">
       <span class="qs-ico">📚</span>
@@ -1548,6 +2331,7 @@ body.photo-mode #photoPanel{cursor:default}
         <span class="qs-title">Продолжить урок</span>
         <span class="qs-sub">200 уроков · 4 уровня</span>
       </span>
+      <span class="qs-arrow">›</span>
     </button>
     <button class="qs-btn" onclick="qsRandom()">
       <span class="qs-ico">🎲</span>
@@ -1555,6 +2339,7 @@ body.photo-mode #photoPanel{cursor:default}
         <span class="qs-title">Случайная локация</span>
         <span class="qs-sub">Из 12 миров</span>
       </span>
+      <span class="qs-arrow">›</span>
     </button>
   </div>
 
@@ -1627,7 +2412,7 @@ body.photo-mode #photoPanel{cursor:default}
 
   <div class="menu-footer">
     <div class="footer-line"></div>
-    <div class="footer-text">🛸 AETHER · FLIGHT LAB · URBAN TIGRAN · 10 «А» · MMXXV</div>
+    <div class="footer-text">🛸 SKYFORGE · FLIGHT LAB</div>
     <div class="footer-sub">Three.js · WebGL · 100% в браузере</div>
   </div>
 </div>
@@ -1871,6 +2656,7 @@ body.photo-mode #photoPanel{cursor:default}
   <button id="recPanelBtn" onclick="toggleRecPanel()" title="Рекордер (Shift+G)">⏺</button>
   <button id="replayPanelBtn" onclick="toggleReplayMode()" title="Реплей (Shift+R)">🎬</button>
   <button id="photoPanelBtn" onclick="togglePhotoMode()" title="Фото (Shift+P)">📸</button>
+  <button id="hudSettingsBtn" onclick="toggleHudSettings()" title="Настройки HUD (`)">⚙</button>
 </div>
 
 <!-- ═══ WAVE 8: МИКШЕР ═══ -->
@@ -2001,6 +2787,7 @@ body.photo-mode #photoPanel{cursor:default}
   <span class="m-item ok" id="mh-bat-wrap">🔋 <b id="mh-bat">100%</b></span>
   <span class="m-sep"></span>
   <span class="m-mode" id="mh-mode">ANGLE</span>
+  <span class="m-item" id="mh-input" title="Источник ввода">⌨</span>
   <span class="m-item" id="mh-wx">☀️</span>
   <span class="m-item" id="mh-seas">🌞</span>
   <span class="m-item" id="mh-time">☀️</span>
@@ -2119,6 +2906,110 @@ body.photo-mode #photoPanel{cursor:default}
   </div>
   <div class="pm-tip">Нажми <kbd>F1</kbd>–<kbd>F12</kbd> чтобы включить панель · <kbd>ESC</kbd> — закрыть это окно</div>
 </div>
+<div id="hudSettings">
+  <h3>⚙ НАСТРОЙКИ HUD</h3>
+
+  <!-- WAVE 9.1: Прозрачность -->
+  <div class="hs-section">
+    <div class="hs-section-title">👁 ПРОЗРАЧНОСТЬ</div>
+    <div class="hs-opacity-row">
+      <span class="hs-opacity-ico">🔆</span>
+      <input type="range" id="hudOpacitySlider" min="20" max="100" step="5" value="100" oninput="setHudOpacity(this.value)">
+      <span class="hs-opacity-val" id="hudOpacityVal">100%</span>
+    </div>
+  </div>
+
+  <!-- WAVE 9.2: Иконки topright -->
+  <div class="hs-section">
+    <div class="hs-section-title">🔝 КНОПКИ СВЕРХУ СПРАВА</div>
+    <div class="hs-btns-grid" id="hudBtnList"></div>
+  </div>
+
+  <!-- ═══ WAVE B: УПРАВЛЕНИЕ ═══ -->
+  <div class="hs-section">
+    <div class="hs-section-title">🎮 СХЕМА УПРАВЛЕНИЯ</div>
+    <div class="scheme-picker" id="schemePicker"></div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl">Чувств. газа</span>
+      <input type="range" id="sensThrottle" min="50" max="200" value="100" oninput="onSensChange('throttle',this.value)">
+      <span class="ctrl-val" id="sensThrottleV">1.00</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl">Чувств. yaw</span>
+      <input type="range" id="sensYaw" min="50" max="200" value="100" oninput="onSensChange('yaw',this.value)">
+      <span class="ctrl-val" id="sensYawV">1.00</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl">Чувств. pitch</span>
+      <input type="range" id="sensPitch" min="50" max="200" value="100" oninput="onSensChange('pitch',this.value)">
+      <span class="ctrl-val" id="sensPitchV">1.00</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl">Чувств. roll</span>
+      <input type="range" id="sensRoll" min="50" max="200" value="100" oninput="onSensChange('roll',this.value)">
+      <span class="ctrl-val" id="sensRollV">1.00</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl">Expo (мягк.)</span>
+      <input type="range" id="sensExpo" min="0" max="100" value="35" oninput="onExpoChange(this.value)">
+      <span class="ctrl-val" id="sensExpoV">0.35</span>
+    </div>
+    <div class="ctrl-row">
+      <span class="ctrl-lbl">Deadzone</span>
+      <input type="range" id="sensDZ" min="0" max="25" value="8" oninput="onDzChange(this.value)">
+      <span class="ctrl-val" id="sensDZV">0.08</span>
+    </div>
+    <div class="hs-drag-hint" id="gamepadStatus">🎮 Геймпад не подключён</div>
+    <button class="hs-drag-reset" style="width:100%;margin-top:8px" onclick="controlResetAll()">↺ Сброс управления</button>
+  </div>
+  <!-- WAVE 9.5: Режим редактирования позиций -->
+  <div class="hs-section">
+    <div class="hs-section-title">🔧 ПЕРЕТАСКИВАНИЕ</div>
+    <div class="hs-drag-row">
+      <button id="hudDragBtn" onclick="toggleHudDragMode()" class="hs-drag-toggle">🔓 Разблокировать</button>
+      <button onclick="resetHudPositions()" class="hs-drag-reset" title="Вернуть всё на места">↺ Сброс</button>
+    </div>
+    <div class="hs-drag-hint">Когда включено — элементы можно перетаскивать мышью или пальцем.</div>
+  </div>
+
+  <div class="hs-section-title" style="padding:0 4px;margin-top:12px">📊 ЭЛЕМЕНТЫ HUD</div>
+  <div class="hs-grid">
+    <label class="hs-item"><input type="checkbox" data-hud="topright"><span>🔝 Кнопки сверху справа</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="miniHud"><span>📊 Мини-бар</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="compass"><span>🧭 Компас</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="attitude"><span>✈ Авиагоризонт</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="flightMode"><span>🛸 Режим полёта</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="flightTimer"><span>⏱ Таймер</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="envPanel"><span>🌦 Погода / Сезон</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="timeSlider"><span>🕐 Время суток</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="minimap"><span>🗺 Миникарта</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="homeArrow"><span>🏠 Стрелка домой</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="stickIndicator"><span>🎮 Индикатор стиков</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="mobileButtons"><span>📱 Кнопки (моб.)</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="camPanel"><span>📷 Панель камеры</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="crosshair"><span>➕ Прицел</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="warnings"><span>⚠ Предупреждения</span></label>
+    <label class="hs-item"><input type="checkbox" data-hud="damageIndicator"><span>🔥 Повреждения</span></label>
+  </div>
+  <!-- WAVE D: физика -->
+  <div class="hs-section" style="margin-top:10px">
+    <div class="hs-section-title">⚙ ФИЗИКА ПОЛЁТА</div>
+    <label class="hs-item" style="grid-column:1/-1">
+      <input type="checkbox" id="vrsToggle" onchange="onVrsToggle(this.checked)">
+      <span>🌀 VRS (вихревое кольцо)</span>
+    </label>
+    <div class="hs-drag-hint">Отключите, если VRS мешает тренировкам.</div>
+  </div>
+  <div class="hs-actions">
+    <button onclick="hudPreset('cinema')" style="grid-column:1 / -1;color:#ffcc44;border-color:#ffcc44;background:linear-gradient(135deg,rgba(120,80,10,0.9),rgba(60,40,5,0.9))">🎥 Видео-профиль</button>
+    <button onclick="hudPreset('clean')">🚫 Минимум</button>
+    <button onclick="hudPreset('all')">✅ Всё вкл</button>
+    <button onclick="hudPreset('blank')" style="color:#ff8888;border-color:#ff6666;background:rgba(60,0,15,0.7)">🕳 Всё скрыть</button>
+    <button onclick="hudPreset('default')" style="grid-column:1 / -1">↺ По умолчанию</button>
+    <button class="close" onclick="toggleHudSettings()">[ ` ] Закрыть</button>
+  </div>
+</div>
+
 <div id="hud"></div>
 <div id="controls">
   <b>W/S</b>·<b>↑/↓</b> тангаж · <b>A/D</b> поворот · <b>Q/E</b>·<b>←/→</b> крен · <b>Space</b> вверх · <b>Shift</b> вниз<br>
@@ -2140,14 +3031,26 @@ body.photo-mode #photoPanel{cursor:default}
 
 <canvas id="minimap" width="200" height="200"></canvas>
 
+<!-- ═══ WAVE G — Мобильное управление (упрощённое) ═══ -->
 <div id="mobileControls">
-  <div class="joystick" id="joyLeft"><div class="label">Газ / Поворот</div><div class="knob"></div></div>
-  <div class="joystick" id="joyRight"><div class="label">Тангаж / Крен</div><div class="knob"></div></div>
+  <div class="joystick" id="joyLeft">
+    <div class="label">ТАНГАЖ · YAW</div>
+    <div class="knob"></div>
+  </div>
+  <div class="joystick" id="joyRight">
+    <div class="label">ГАЗ · КРЕН</div>
+    <div class="knob"></div>
+  </div>
 </div>
+
+<!-- ═══ WAVE G — Кнопки действий (минимальный набор) ═══ -->
 <div id="mobileButtons">
-  <button onclick="toggleForces()" title="Силы">F</button>
-  <button onclick="cycleCamera()" title="Камера">C</button>
-  <button onclick="resetDrone()" title="Сброс">R</button>
+  <button id="mbHover"  onclick="toggleHoverMobile()" title="Hover (удержание высоты)">H</button>
+  <button id="mbThrUp"  onclick="mobileThrottle(1)"   title="Газ вверх">▲</button>
+  <button id="mbThrDn"  onclick="mobileThrottle(-1)"  title="Газ вниз">▼</button>
+  <button id="mbCam"    onclick="cycleCameraMobile()" title="Камера">📷</button>
+  <button id="mbMode"   onclick="cycleFlightModeMobile()" title="Режим полёта">✈</button>
+  <button id="mbReset"  onclick="resetDrone()"        title="Сброс">↺</button>
 </div>
 
 <div id="crosshair">✛</div>
@@ -2236,7 +3139,7 @@ body.photo-mode #photoPanel{cursor:default}
 </div>
 
 <div id="certificateModal">
-  <div class="cert-tag">◈ AETHER FLIGHT ACADEMY ◈</div>
+  <div class="cert-tag">◈ SKYFORGE FLIGHT ACADEMY ◈</div>
   <div class="cert-title">СЕРТИФИКАТ</div>
   <div class="cert-line"></div>
   <div class="cert-text">Настоящим удостоверяется, что</div>
@@ -2245,7 +3148,7 @@ body.photo-mode #photoPanel{cursor:default}
   <div class="cert-name" id="certCourse" style="font-size:16px;letter-spacing:1.5px">—</div>
   <div class="cert-text" id="certDesc">—</div>
   <div class="cert-line"></div>
-  <div class="cert-meta">AETHER v23 · <span id="certDate">—</span> · URBAN TIGRAN</div>
+  <div class="cert-meta">SKYFORGE · <span id="certDate">—</span></div>
   <div class="cert-buttons">
     <button onclick="printCertificate()">🖨 Распечатать</button>
     <button onclick="downloadCertificate()">📥 Скачать</button>
@@ -2326,7 +3229,45 @@ body.photo-mode #photoPanel{cursor:default}
   <button class="modal-close" onclick="closeAchievements()">[ ESC ] ЗАКРЫТЬ</button>
 </div></div>
 
+<!-- ═══════════════════════════════════════════════════════════
+     Three.js r128 — с автоматическим fallback через CDN.
+     Порядок: jsdelivr → unpkg → cdnjs (Cloudflare) → локальный файл.
+     Если всё упало — показываем понятную инструкцию вместо лоадера.
+     ═══════════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+  if(!window.THREE){
+    console.warn('[AETHER] jsdelivr недоступен, пробуем unpkg...');
+    document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js"><\/script>');
+  }
+</script>
+<script>
+  if(!window.THREE){
+    console.warn('[AETHER] unpkg недоступен, пробуем cdnjs (Cloudflare)...');
+    document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+  }
+</script>
+<script>
+  if(!window.THREE){
+    console.warn('[AETHER] cdnjs недоступен, пробуем локальный ./three.min.js...');
+    document.write('<script src="./three.min.js"><\/script>');
+  }
+</script>
+<script>
+  if(!window.THREE){
+    console.error('[AETHER] Все источники Three.js упали.');
+    window._showFatalError({
+      message:'Three.js не загрузился ни с одного CDN.\n\n'+
+              'Как починить (по порядку):\n'+
+              '1) Отключи VPN на 15 секунд и обнови страницу\n'+
+              '2) Открой файл в Chrome или Safari напрямую (не в Telegram)\n'+
+              '3) Проверь интернет / Wi-Fi\n'+
+              '4) Скачай three.min.js (r128) и положи рядом с index.html'
+    }, 'three-load');
+  } else {
+    console.log('[AETHER] Three.js r128 готов, REVISION=' + THREE.REVISION);
+  }
+</script>
 <script>
 // ============================================================
 // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
@@ -2355,6 +3296,7 @@ let audioCtx=null,motorOscs=[],motorGains=[],soundEnabled=false;
 let windNoise=null,windGain=null,propWashNoise=null,propWashGain=null;
 let isMobile=false;
 let isLowEnd=false;
+let inputMode='desktop';   // 'desktop' | 'touch'
 // ═══════════════════════════════════════════════════════════
 // DEV — единый профиль качества. Desktop = текущие значения.
 // Mobile переопределяется в detectMobile().
@@ -2390,6 +3332,47 @@ const DEV={
 };
 let joyLeft={x:0,y:0,active:false,id:null},joyRight={x:0,y:0,active:false,id:null};
 let hoverMode=false,hoverTargetY=5.0;
+
+// ═══════════════════════════════════════════════════════════════
+// WAVE B — Унифицированное управление SKYFORGE
+// Схема Mode 2 (мировой стандарт для дронов) + геймпад + expo.
+// ═══════════════════════════════════════════════════════════════
+const CONTROL_SCHEMES={
+  // ═══════════════════════════════════════════════════════════════
+  // WAVE F FIX — переименовано и переставлено для ясности.
+  // Классическая FPV-раскладка (W/S=тангаж) — первая и по умолчанию.
+  // ═══════════════════════════════════════════════════════════════
+  mode2:    {name:'Классика', sub:'W/S·↑/↓ — тангаж, Q/E·←/→ — крен, A/D — yaw', desc:'Стандарт FPV'},
+  mode1:    {name:'Mode 2 · Газ',sub:'W/S — газ, A/D — yaw, ↑/↓ — тангаж, ←/→ — крен', desc:'Стандарт реальных дронов'},
+  shooter:  {name:'Shooter', sub:'WASD как в FPS', desc:'Классика гейминга'},
+  custom:   {name:'Custom',  sub:'Настроить самому', desc:'Для профи'}
+};
+let controlScheme='mode2';   // текущая активная
+// Настройки чувствительности (0.5 — 2.0)
+let inputSensitivity={
+  throttle:1.0,
+  yaw:1.0,
+  pitch:1.0,
+  roll:1.0
+};
+// Expo — кривая отклика. 0 = линейно, 1 = сильно нелинейно (мягко у центра)
+let inputExpo=0.35;
+// Deadzone для джойстиков (0–0.25)
+let inputDeadzone=0.08;
+// Gamepad state
+let gamepadIndex=-1;          // -1 = нет подключённого
+let gamepadState={
+  axes:[0,0,0,0],             // [lx, ly, rx, ry]
+  buttons:{},                 // {0:true, ...}
+  connected:false,
+  name:''
+};
+let gamepadStickL={x:0,y:0};  // обработанные значения
+let gamepadStickR={x:0,y:0};
+// Флаг что мы уже видели хоть один gamepad (чтобы не спамить тостами)
+let gamepadSeenOnce=false;
+
+const CONTROL_KEY='skyforge_control_v1';
 let autopilotMode=false,autopilotTarget={x:0,y:5,z:0},autopilotCtrl=null,autopilotLanding=false;
 let minimapCtx=null;
 let quizModalOpen=false;
@@ -2408,6 +3391,16 @@ let dayTime=0.35,dayCycleSpeed=1/360,dayNightEnabled=true;
 let ringsPassed=0,maxSpeed=0,maxAltitude=0,totalFlightTime=0,maxGForce=0;
 let motorFailureIndex=-1,motorFailureTimer=0;
 let imuNoiseLevel=0.004;
+// ═══════════════════════════════════════════════════════════════
+// WAVE E FIX — VRS теперь ВЫКЛЮЧЕН ПО УМОЛЧАНИЮ.
+// 
+// Почему: VRS на маленьких дронах и высоких спавнах создаёт
+// замкнутый цикл (VRS→падение→невозможность взлёта→VRS).
+// Игрок жмёт W, тяга × 0.5, дрон не поднимается — VRS залипает.
+//
+// Включить можно в ⚙ HUD Settings → ⚙ ФИЗИКА ПОЛЁТА → 🌀 VRS.
+// ═══════════════════════════════════════════════════════════════
+window.vrsDisabled=true;
 
 // ═══ WAVE 8: MIXER UI ═══
 let mixerPanelOpen=false;
@@ -3091,7 +4084,7 @@ function openCertificate(courseKey){
   // Проверка: все ли курсы пройдены
   let allDone=true;
   Object.keys(COURSES).forEach(k=>{if(!COURSES[k].check(s))allDone=false;});
-  if(allDone)document.getElementById('certName').textContent='МАСТЕР AETHER';
+  if(allDone)document.getElementById('certName').textContent='МАСТЕР SKYFORGE';
   else document.getElementById('certName').textContent='ПИЛОТ';
 }
 function closeCertificate(){
@@ -3105,7 +4098,7 @@ function downloadCertificate(){
   const c=document.getElementById('certCourse').textContent;
   const n=document.getElementById('certName').textContent;
   const d=document.getElementById('certDate').textContent;
-  const text='AETHER FLIGHT ACADEMY\n\nСЕРТИФИКАТ\n\n'+n+'\n\nуспешно завершил(а) курс:\n'+c+'\n\nДата: '+d+'\nAETHER v23 · URBAN TIGRAN · MMXXV\n';
+  const text='SKYFORGE FLIGHT ACADEMY\n\nСЕРТИФИКАТ\n\n'+n+'\n\nуспешно завершил(а) курс:\n'+c+'\n\nДата: '+d+'\nSKYFORGE · MMXXVI\n';
   const blob=new Blob([text],{type:'text/plain'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
@@ -3178,7 +4171,15 @@ function updateLessonTarget(){
     // HTML overlay — кружок на экране
     const el=document.getElementById('lessonTarget');
     if(el){
-      const screenPos=m.resetPos.clone();
+      // ═══════════════════════════════════════════════════════════
+      // WAVE FIX (исходный баг v28):
+      //   m.resetPos — это plain-object {x,y,z} из массива LESSONS,
+      //   НЕ THREE.Vector3. У plain-object нет .clone().
+      //   Было: m.resetPos.clone() → TypeError → animate() падал →
+      //   вся игра зависала при входе в Уроки.
+      //   Стало: используем пул _v1 (без аллокаций).
+      // ═══════════════════════════════════════════════════════════
+      const screenPos=_v1.set(m.resetPos.x,m.resetPos.y,m.resetPos.z);
       screenPos.project(camera);
       if(screenPos.z<1){
         const x=(screenPos.x*0.5+0.5)*window.innerWidth;
@@ -3353,7 +4354,10 @@ function applyCameraMode(){
   if(cbars)cbars.style.display=cinemaActive?'block':'none';
   const gog=document.getElementById('gogglesOverlay');
   if(gog)gog.style.display=gogglesActive?'block':'none';
-  // Free-look: разрешаем MouseOrbit в режиме 7
+  // WAVE MOBILE-QUALITY: сбрасываем look-offset при смене режима,
+  // чтобы взгляд не остался «скошенным» после переключения
+  lookOffsetYaw=0;
+  lookOffsetPitch=0;
   updateCameraLabel();
   showToast('📷 '+CAMERA_LABELS[cameraMode]);
 }
@@ -3656,7 +4660,7 @@ const ACHIEVEMENTS={
   vrs_survivor:{name:'🌀 VRS',desc:'Выжить',check:s=>s.vrsSurvives>=1,prog:s=>s.vrsSurvives+'/1'},
   high_alt:{name:'🛰 Стратосфера',desc:'500 м',check:s=>s.maxAltitude>=500,prog:s=>Math.round(s.maxAltitude)+'/500'},
   gforce:{name:'💥 Перегрузка',desc:'G > 3g',check:s=>s.maxGForce>=3,prog:s=>s.maxGForce.toFixed(1)+'/3'},
-  aether_pilot:{name:'🏅 Пилот AETHER',desc:'200 уроков',check:s=>s.missionsDone>=200,prog:s=>s.missionsDone+'/200'},
+  aether_pilot:{name:'🏅 Пилот SKYFORGE',desc:'200 уроков',check:s=>s.missionsDone>=200,prog:s=>s.missionsDone+'/200'},
   rth_master:{name:'🏠 RTH-мастер',desc:'10 RTH',check:s=>(s.rthUsed||0)>=10,prog:s=>(s.rthUsed||0)+'/10'},
   acro_ace:{name:'🎪 Acro-ас',desc:'5 мин в Acro',check:s=>(s.acroTime||0)>=300,prog:s=>Math.floor(s.acroTime||0)+'/300 сек'},
   thermal_surv:{name:'🔥 Термо-выживание',desc:'Моторы <120°',check:s=>(s.thermalSurvived||0)>=1,prog:s=>(s.thermalSurvived||0)+'/1'},
@@ -4232,9 +5236,11 @@ function updateVoiceMonitors(){
   const gpsBad=gpsFailure||gpsFix<0.4;
   if(gpsBad&&!s.gpsFail){s.gpsFail=true;sayGPSLost();}
   if(!gpsBad&&s.gpsFail){s.gpsFail=false;sayGPSOk();}
-  // VRS
-  if(physics.vrsIntensity>0.6&&!s.vrs){s.vrs=true;sayVRS();}
-  if(physics.vrsIntensity<0.3)s.vrs=false;
+  // WAVE D FIX: VRS-озвучка только на высоте >5 и с задержкой.
+  // Раньше при спавне «дрон падает → VRS → голос» на пустом месте.
+  const vrsReal=physics.vrsIntensity>0.7&&physics.pos.y>5;
+  if(vrsReal&&!s.vrs){s.vrs=true;sayVRS();}
+  if(!vrsReal&&s.vrs){s.vrs=false;}
   // Link
   const linkBad=linkQuality<0.15;
   if(linkBad&&!s.linkLost){s.linkLost=true;sayLinkLost();}
@@ -4975,13 +5981,20 @@ function playThunder(){
 // ============================================================
 function disposeObject3D(obj){
   if(!obj)return;
+  const seenGeo=new Set();
+  const seenMat=new Set();
   obj.traverse(o=>{
-    if(o.geometry)o.geometry.dispose();
+    // WAVE A: защита от повторного dispose shared-ресурсов
+    // (например, 6 god-ray плоскостей используют одну geometry и один material)
+    if(o.geometry&&!seenGeo.has(o.geometry)){
+      seenGeo.add(o.geometry);
+      o.geometry.dispose();
+    }
     if(o.material){
       const mats=Array.isArray(o.material)?o.material:[o.material];
       mats.forEach(m=>{
-        if(!m)return;
-        // dispose всех текстур на материале
+        if(!m||seenMat.has(m))return;
+        seenMat.add(m);
         for(const k in m){
           const v=m[k];
           if(v&&v.isTexture)v.dispose();
@@ -5112,7 +6125,9 @@ class DronePhysics{
     this.forceThrust=new THREE.Vector3();this.forceGravity=new THREE.Vector3();
     this.forceDrag=new THREE.Vector3();this.forceNet=new THREE.Vector3();
     this.powerDraw=0;this.currentDraw=0;this.groundEffectFactor=1;this._landed=false;
+    // WAVE D FIX: жёстко обнуляем и монитор VRS
     this.thrustFiltered=0;this.momentsFiltered={x:0,y:0,z:0};this.vrsIntensity=0;
+    if(window._vMonState)window._vMonState.vrs=false;
     this.gyroMoment=new THREE.Vector3();this.airDensity=this.p.airDensity0;this.densityRatio=1;
     this.gForce=1;this.prevVel=new THREE.Vector3();
     this._tmpThrustVec=new THREE.Vector3();this._tmpF=new THREE.Vector3();this._tmpVR=new THREE.Vector3();
@@ -5145,7 +6160,10 @@ class DronePhysics{
     thrust*=vFactor*airFactor;
     const maxT=p.maxThrust*vFactor*airFactor;
     thrust=Math.min(thrust,maxT);
-    thrust*=(1-this.vrsIntensity*0.85);
+    // WAVE D FIX: было 0.85 (тяга падала до 15%). Теперь 0.5 —
+    // VRS ощущается, но управляем. При спавне vrsIntensity=0,
+    // так что на старте этот множитель = 1.0.
+    thrust*=(1-this.vrsIntensity*0.5);
     const alpha=Math.min(1,dt/p.motorTau);
     this.thrustFiltered+=(thrust-this.thrustFiltered)*alpha;
     this.momentsFiltered.x+=(moments.x-this.momentsFiltered.x)*alpha;
@@ -5169,16 +6187,30 @@ class DronePhysics{
     this.forceDrag.copy(vr).multiplyScalar(-speedFactor*this.densityRatio*compressibility);
     const f=this._tmpF.set(0,0,0);
     f.add(thrustVec);f.add(this.forceGravity);f.add(this.forceDrag);
-    // WAVE 1: Perlin turbulence
-    const t=performance.now()*0.001;
-    const turbAmp=0.35*Math.min(1,this.pos.y/5+0.3);
-    f.x+=perlin2D(t*1.3,this.pos.x*0.05+turbAmp)*turbAmp;
-    f.y+=perlin2D(t*0.9,this.pos.y*0.05+turbAmp)*turbAmp*0.4;
-    f.z+=perlin2D(t*1.1,this.pos.z*0.05+turbAmp)*turbAmp;
+    // ═══════════════════════════════════════════════════════════════
+    // WAVE D FIX (вихри) — ГЛАВНЫЙ ФИКС:
+    //   perlin turbulence был НЕЗАВИСИМ от ветра и всегда бил
+    //   постоянным шумом ±0.35 Н по X/Z. Для лёгких дронов
+    //   (tiny 0.25 кг) это ±1.4 м/с² → НЕВОЗМОЖНО управлять.
+    //   Для тяжёлых (cargo 5 кг) это 0.07 м/с² — незаметно.
+    //   Теперь: турбулентность масштабируется от МАССЫ,
+    //   а её базовый уровень снижен в 7 раз (0.35 → 0.05).
+    //   Полностью отключается если ветер выключен.
+    // ═══════════════════════════════════════════════════════════════
+    const _windOn=windModel&&windModel.enabled;
+    const _turbBase=_windOn?0.05:0.0;
+    const _turbMassScale=Math.min(1,1.2/p.mass);   // лёгкие → мéньше
+    const _turbAmp=_turbBase*_turbMassScale*Math.min(1,this.pos.y/15+0.15);
+    if(_turbAmp>0.001){
+      const t=performance.now()*0.001;
+      f.x+=perlin2D(t*1.3,this.pos.x*0.05+_turbAmp)*_turbAmp;
+      f.y+=perlin2D(t*0.9,this.pos.y*0.05+_turbAmp)*_turbAmp*0.4;
+      f.z+=perlin2D(t*1.1,this.pos.z*0.05+_turbAmp)*_turbAmp;
+    }
     this.forceNet.copy(f);
-    // ═══ WAVE 4: продвинутая аэродинамика ═══
-    const velLocal=new THREE.Vector3();
-    velLocal.copy(this.vel);
+    // ═══ WAVE 4/A: продвинутая аэродинамика ═══
+    // WAVE A: velLocal был new Vector3() КАЖДЫЙ ШАГ (200 Гц) и НЕ использовался.
+    // Убрано полностью — экономим ~12000 объектов/сек.
     // ═══ WAVE 6 ФИЗИКА: динамический угол атаки винта ═══
     // AoA растёт с горизонтальной скоростью и тангажом.
     // При срыве (AoA > 14°) — резкое падение тяги.
@@ -5343,12 +6375,41 @@ class DronePhysics{
     if(this.currentDraw<0)this.currentDraw=0;
   }
   updateVRS(dt){
+    // ═══════════════════════════════════════════════════════════
+    // WAVE E FIX — переписано полностью.
+    //
+    // Ключевые отличия от D15:
+    //  1) AUTO-ESCAPE: если игрок дал тягу >0.9 mg — VRS
+    //     сбрасывается за 0.1 сек. Больше НЕТ залипания.
+    //  2) Порог thrustRatio 0.7–0.9 (было 0.7–1.5). При полном
+    //     газе VRS просто не набирается.
+    //  3) Порог pos.y >10 (было >5). Ниже — не бывает VRS
+    //     вообще, даже при вертикальном падении.
+    //  4) Порог descentRate >7 (было >5.5). Нужно падать
+    //     быстрее, чтобы VRS вообще включился.
+    //  5) Быстрое затухание −10/сек (было −5).
+    //  6) HARD RESET при y<10 — тоже чистит монитор голоса.
+    // ═══════════════════════════════════════════════════════════
+    if(window.vrsDisabled){this.vrsIntensity=0;return;}
     const p=this.p;
+    const thrustRatio=this.thrust/Math.max(0.01,p.mass*p.gravity);
+
+    // AUTO-ESCAPE: полный газ всегда выводит из VRS
+    if(thrustRatio>0.9){
+      this.vrsIntensity=Math.max(0,this.vrsIntensity-dt*10);
+      return;
+    }
+
+    // У земли VRS нет (ground effect гасит поток)
+    if(this.pos.y<10){this.vrsIntensity=0;return;}
+
     const descentRate=-this.vel.y;
-    const thrustRatio=this.thrust/(p.mass*p.gravity);
-    const inVRS=descentRate>5&&descentRate<15&&thrustRatio>0.5&&thrustRatio<1.4&&this.pos.y>2;
-    if(inVRS)this.vrsIntensity=Math.min(1,this.vrsIntensity+dt*1.2);
-    else this.vrsIntensity=Math.max(0,this.vrsIntensity-dt*2);
+    // Узкий диапазон — только при мягком висении без газа
+    const inVRS=descentRate>7&&descentRate<14&&
+                thrustRatio>0.7&&thrustRatio<0.9&&
+                this.pos.y>12;
+    if(inVRS)this.vrsIntensity=Math.min(1,this.vrsIntensity+dt*0.6);
+    else this.vrsIntensity=Math.max(0,this.vrsIntensity-dt*10);
   }
   computeGroundEffect(){
     const p=this.p,h=this.pos.y;
@@ -5514,7 +6575,22 @@ class WindModel{
   }
   update(dt,alt){
     alt=alt||0;
-    if(!this.enabled&&currentWeather==='clear'&&currentWeather!=='storm'){this.current.set(0,0,0);this.current.add(urbanGustVec);return this.current;}
+    // ═══════════════════════════════════════════════════════════
+    // WAVE D FIX: убрана тавтология (`clear && !storm` всегда true).
+    // Теперь: если ветер выключен — НИЧЕГО не добавляем, даже gust.
+    // Gust всё равно применяется через forceDrag при пересчёте
+    // относительной скорости, отдельная инъекция не нужна.
+    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // WAVE D FIX (вихри v2):
+    //   Раньше возвращали urbanGustVec (даже маленький).
+    //   Теперь при выключенном ветре — СТРОГО НУЛИ.
+    //   Никаких фоновых потоков, никаких остатков от прошлой сцены.
+    // ═══════════════════════════════════════════════════════════
+    if(!this.enabled){
+      this.current.set(0,0,0);
+      return this.current;
+    }
     this.time+=dt;
     this.gust.set(Math.sin(this.time*0.7)*0.8+(Math.random()-0.5)*0.3,0,Math.cos(this.time*0.5)*0.6+(Math.random()-0.5)*0.3);
     this.turb.lerp(new THREE.Vector3((Math.random()-0.5)*0.6,0,(Math.random()-0.5)*0.6),0.02);
@@ -5932,32 +7008,37 @@ function updateSensors(dt){
 // WAVE 1: Urban gusts
 // ============================================================
 function updateUrbanGusts(){
+  // ═══════════════════════════════════════════════════════════════
+  // WAVE D FIX (вихри v3): gust от зданий ПОЛНОСТЬЮ ОТКЛЮЧЁН.
+  //   Идея была красивой (аэродинамика городских улиц), но на
+  //   практике она работала как постоянный вихрь рядом с каждым
+  //   зданием. Игрок не мог летать в городе — дрона тянуло вбок.
+  //   Оставляем только визуальный windArrow, который покажет
+  //   направление ветра из weather-системы.
+  // ═══════════════════════════════════════════════════════════════
   urbanGustVec.set(0,0,0);
-  const px=physics.pos.x,pz=physics.pos.z;
-  let gustX=0,gustZ=0;
-  for(let i=0;i<obstacles.length;i++){
-    const o=obstacles[i];
-    if(o.h<10)continue;
-    const dx=px-o.x,dz=pz-o.z;
-    const d=Math.sqrt(dx*dx+dz*dz);
-    if(d>40)continue;
-    const force=Math.max(0,(40-d)/40)*(o.h/50)*0.5;
-    if(d>0.1){gustX+=dx/d*force*0.6;gustZ+=dz/d*force*0.6;urbanGustVec.y+=force*0.8;}
-  }
-  urbanGustVec.x+=gustX;urbanGustVec.z+=gustZ;
-  if(urbanGustVec.length()>3)urbanGustVec.setLength(3);
 }
-
 
 // ═══ WAVE 4: термики ═══
 function spawnThermals(){
   thermals=[];
-  // 5-8 термиков в случайных точках
-  for(let i=0;i<6;i++){
-    const x=(Math.random()-0.5)*600;
-    const z=(Math.random()-0.5)*600;
-    const r=20+Math.random()*30;
-    const strength=1.5+Math.random()*3;
+  // ═══════════════════════════════════════════════════════════════
+  // WAVE D FIX (вихри v3):
+  //   - 3 термика вместо 6 (меньше вероятность попасть в спавн)
+  //   - радиус от 25 до 40 м (было 20-50)
+  //   - термики НЕ создаются в радиусе 60 м от старта
+  // ═══════════════════════════════════════════════════════════════
+  const sx=physics?physics.pos.x:0;
+  const sz=physics?physics.pos.z:0;
+  for(let i=0;i<3;i++){
+    let x,z,tries=0;
+    do{
+      x=(Math.random()-0.5)*600;
+      z=(Math.random()-0.5)*600;
+      tries++;
+    }while(Math.hypot(x-sx,z-sz)<60&&tries<10);
+    const r=25+Math.random()*15;
+    const strength=0.8+Math.random()*1.5;
     thermals.push({x,z,r,strength,phase:Math.random()*PI*2});
   }
 }
@@ -5965,14 +7046,20 @@ function spawnThermals(){
 function updateThermals(dt){
   const t=performance.now()*0.001;
   let strongest=0;
+  // ═══════════════════════════════════════════════════════════════
+  // WAVE D FIX (вихри v3): термики ослаблены в 5 раз.
+  //   Было: 0.3 Н + 0.02 м/с² ускорения → для лёгкого дрона
+  //   это заметный «подъём» непонятно откуда.
+  //   Стало: 0.06 Н + 0.004 м/с² — только визуальный «плюс».
+  // ═══════════════════════════════════════════════════════════════
   thermals.forEach(th=>{
     const dx=physics.pos.x-th.x,dz=physics.pos.z-th.z;
     const d=Math.sqrt(dx*dx+dz*dz);
     if(d<th.r){
       const intensity=(1-d/th.r)*th.strength*(0.85+Math.sin(t*0.7+th.phase)*0.15);
       if(physics.pos.y<50){
-        physics.forceNet.y+=intensity*0.3;
-        physics.vel.y+=intensity*0.02*dt;
+        physics.forceNet.y+=intensity*0.06;
+        physics.vel.y+=intensity*0.004*dt;
       }
       if(intensity>strongest)strongest=intensity;
     }
@@ -6158,28 +7245,7 @@ function renderHomeArrow(){
   if(el)el.textContent=dist.toFixed(0)+' м';
 }
 function renderStickIndicator(){
-  const cmd=function readInput(){
-  const cmd={pitch:0,roll:0,yawRate:0,throttle:0};
-  if(!isMobile){
-    // Тангаж: W/S или ↑/↓
-    if(Input.isDown('KeyW')||Input.isDown('ArrowUp'))cmd.pitch-=0.3;
-    if(Input.isDown('KeyS')||Input.isDown('ArrowDown'))cmd.pitch+=0.3;
-    // Поворот (yaw): A/D
-    if(Input.isDown('KeyA'))cmd.yawRate+=2.0;
-    if(Input.isDown('KeyD'))cmd.yawRate-=2.0;
-    // Крен (roll): Q/E или ←/→
-    if(Input.isDown('KeyQ')||Input.isDown('ArrowLeft'))cmd.roll+=0.3;
-    if(Input.isDown('KeyE')||Input.isDown('ArrowRight'))cmd.roll-=0.3;
-    // Газ: Space — вверх, Shift — вниз (интуитивная пара)
-    if(Input.isDown('Space'))cmd.throttle+=0.15;
-    if(Input.isDown('ShiftLeft')||Input.isDown('ShiftRight'))cmd.throttle-=0.15;
-  }else{
-    cmd.roll=-joyRight.x*0.3;cmd.pitch=joyRight.y*0.3;
-    cmd.throttle=-joyLeft.y*1.2;cmd.yawRate=-joyLeft.x*2.0;
-  }
-  cmd.throttle=Math.max(-1.5,Math.min(1.5,cmd.throttle));
-  return cmd;
-};
+  const cmd=readInput();
   const joyL=isMobile?joyLeft:{x:cmd.yawRate/2.0,y:-cmd.throttle/1.2};
   const joyR=isMobile?joyRight:{x:-cmd.roll/0.3,y:cmd.pitch/0.3};
   const ld=document.getElementById('stickLeftDot');
@@ -6264,6 +7330,14 @@ function applyWeather(state){
     if(windModel){windModel.enabled=true;windModel.base.set(1.5,0,1.0);}
   }else if(state==='snow'){
     if(windModel){windModel.enabled=true;windModel.base.set(1.0,0,0.5);}
+  }else{
+    // ═══════════════════════════════════════════════════════════════
+    // WAVE D FIX: 'clear' / 'cloudy' / 'fog' — ВЫКЛЮЧАЕМ ветер.
+    // Раньше applyWeather('clear') НЕ выключал ветер: если ты был
+    // в грозу, потом вышел в ясную — windModel.enabled оставался
+    // true с базовой скоростью от грозы.
+    // ═══════════════════════════════════════════════════════════════
+    if(windModel){windModel.enabled=false;windModel.base.set(0,0,0);}
   }
   const rainEl=document.getElementById('rainDrops');
   const frostEl=document.getElementById('frostEdge');
@@ -6440,12 +7514,21 @@ function setTimeFromSlider(v){
 }
 // WAVE FIX 3: кэш god rays — обходим 6 объектов, а не всю сцену
 const _godRayList=[];
+// WAVE A: shared geometry + 1 общий материал → −5 material.clone() + 5 geo
+// WAVE A: добавляем очистку stale-ссылок перед созданием
+let _godRayGeo=null;
+let _godRayMat=null;
 function createGodRays(){
   if(!godRaysEnabled)return;
-  if(_godRayList.length>0)return; // уже созданы — не дублируем
-  const mat=new THREE.MeshBasicMaterial({color:0xffffcc,transparent:true,opacity:0.06,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
+  // Очистим мёртвые ссылки (могли остаться от предыдущего clearWorld)
+  for(let i=_godRayList.length-1;i>=0;i--){
+    if(!_godRayList[i].parent)_godRayList.splice(i,1);
+  }
+  if(_godRayList.length>0)return;
+  if(!_godRayGeo)_godRayGeo=new THREE.PlaneGeometry(3,60);
+  if(!_godRayMat)_godRayMat=new THREE.MeshBasicMaterial({color:0xffffcc,transparent:true,opacity:0.06,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
   for(let i=0;i<6;i++){
-    const plane=new THREE.Mesh(new THREE.PlaneGeometry(3,60),mat.clone());
+    const plane=new THREE.Mesh(_godRayGeo,_godRayMat);
     plane.userData.worldObject=true;
     plane.userData._godRay=true;
     scene.add(plane);
@@ -6560,7 +7643,8 @@ function updateBirds(dt){
 // ============================================================
 function spawnOtherDrones(){
   otherDrones=[];
-  const _nD=Math.max(0,Math.round(3*DEV.ambientScale));
+  // WAVE D FIX: на мобиле 3 дрона-статиста = 30+ draw-calls. 2 хватит.
+  const _nD=Math.max(1,Math.round(2*DEV.ambientScale));
   for(let i=0;i<_nD;i++){
     const g=new THREE.Group();
     const body=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.08,0.4),new THREE.MeshStandardMaterial({color:0x2a2a2a,metalness:0.6,roughness:0.4}));
@@ -6599,7 +7683,8 @@ function updateOtherDrones(dt){
 // ============================================================
 function spawnGroundTraffic(){
   cars=[];
-  const _nCars=Math.max(0,Math.round(12*DEV.ambientScale));
+  // WAVE D FIX: 12 машин на маленькой карте — многовато. 8 хватает.
+  const _nCars=Math.max(3,Math.round(8*DEV.ambientScale));
   for(let i=0;i<_nCars;i++){
     const car=new THREE.Group();
     const body=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.6,3.2),new THREE.MeshStandardMaterial({color:[0xaa2222,0x2244aa,0x22aa22,0xdddddd,0x222222][i%5],metalness:0.6,roughness:0.4}));
@@ -6635,7 +7720,8 @@ function spawnGroundTraffic(){
   trainGroup.position.set(-150,0.3,0);
   trainGroup.userData.t=-150;
   humans=[];
-  const _nHum=Math.max(0,Math.round(20*DEV.ambientScale));
+  // WAVE D FIX: уменьшили людей до 8 — раньше 20 бегали кругами.
+  const _nHum=Math.max(2,Math.round(8*DEV.ambientScale));
   for(let i=0;i<_nHum;i++){
     const h=new THREE.Group();
     const body=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.25,1.0,6),new THREE.MeshStandardMaterial({color:[0x222288,0x882222,0x228822,0x888822][i%4],roughness:0.9}));
@@ -6675,8 +7761,10 @@ function updateGroundTraffic(dt){
 // ============================================================
 function spawnCampfires(){
   campfireSmokes=[];
-  const _nPud=Math.max(0,Math.round(15*DEV.ambientScale));
-  for(let i=0;i<_nPud;i++){
+  // WAVE D FIX: было _nPud (копипаста из spawnPuddles). Уменьшили
+  // количество костров с 15 до 6 — на карте они и так редки.
+  const _nFire=Math.max(2,Math.round(6*DEV.ambientScale));
+  for(let i=0;i<_nFire;i++){
     const x=(Math.random()-0.5)*200,z=(Math.random()-0.5)*200;
     const fire=new THREE.Mesh(new THREE.ConeGeometry(0.6,1.2,6),new THREE.MeshBasicMaterial({color:0xff6600,transparent:true,opacity:0.8}));
     fire.position.set(x,0.6,z);
@@ -6733,23 +7821,100 @@ const WORLD_SIZE=1200;
 function addW(obj){obj.userData.worldObject=true;scene.add(obj);return obj;}
 function clearWorld(){
   const tr=[];scene.traverse(o=>{if(o.userData.worldObject)tr.push(o);});
-  tr.forEach(o=>{disposeObject3D(o);scene.remove(o);});
+  tr.forEach(o=>{scene.remove(o);}); // WAVE A: сначала убрать из scene
+  // WAVE A: dispose с защитой от shared — Set внутри disposeObject3D
+  tr.forEach(o=>{disposeObject3D(o);});
+  // WAVE A: очищаем shared-кэш (иначе следующий мир будет использовать
+  // УЖЕ УДАЛЁННЫЕ буферы → чёрные/пропавшие объекты)
+  if(typeof _clearGeoMatCache==='function')_clearGeoMatCache();
+  // god-ray геометрия/материал тоже в кэше, но создаются вне _geoCache/_matCache
+  if(_godRayGeo){try{_godRayGeo.dispose();}catch(e){}_godRayGeo=null;}
+  if(_godRayMat){try{_godRayMat.dispose();}catch(e){}_godRayMat=null;}
+  _godRayList.length=0;
   obstacles=[];window.rings=null;infRings=[];
   scene.userData.baseFogColor=null;
   scene.userData._groundFog=null;
   if(ofPoints){ofPoints=null;}
-  if(satMeshes&&satMeshes.length){satMeshes.forEach(s=>{disposeObject3D(s);scene.remove(s);});satMeshes=[];}
-  // WAVE FIX 3: сбрасываем список god rays
-  _godRayList.length=0;
+  if(satMeshes&&satMeshes.length){satMeshes.forEach(s=>{scene.remove(s);});satMeshes=[];}
 }
 function loopRing(n,r,cb){for(let i=0;i<n;i++){const a=i*PI*2/n;cb(Math.cos(a)*r,Math.sin(a)*r,a,i);}}
-function ground(c,r){const m=new THREE.Mesh(new THREE.PlaneGeometry(WORLD_SIZE,WORLD_SIZE),new THREE.MeshStandardMaterial({color:c,roughness:r||0.9}));m.rotation.x=-PI/2;m.receiveShadow=true;return addW(m);}
-function pad(x,z,r,col){const p=new THREE.Mesh(new THREE.CylinderGeometry(r,r,0.1,24),new THREE.MeshStandardMaterial({color:0x1a1a1a,emissive:col||0x002244,emissiveIntensity:0.8}));p.position.set(x,0.06,z);return addW(p);}
-function box(x,y,z,w,h,d,c,o){o=o||{};const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color:c,metalness:o.m||0,roughness:o.r||0.85,emissive:o.e||0x000000,emissiveIntensity:o.ei||1}));m.position.set(x,y,z);if(!o.ns)m.castShadow=true;return addW(m);}
-function cyl(x,y,z,rt,rb,h,c,s){const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,s||8),new THREE.MeshStandardMaterial({color:c,roughness:0.85}));m.position.set(x,y,z);m.castShadow=true;return addW(m);}
-function cone(x,yb,z,r,h,c){const m=new THREE.Mesh(new THREE.ConeGeometry(r,h,7),new THREE.MeshStandardMaterial({color:c,flatShading:true,roughness:0.95}));m.position.set(x,yb+h/2,z);m.castShadow=true;return addW(m);}
-function sph(x,y,z,r,c,e){const m=new THREE.Mesh(new THREE.SphereGeometry(r,10,8),new THREE.MeshStandardMaterial({color:c,emissive:e||0x000000,emissiveIntensity:1.2}));m.position.set(x,y,z);return addW(m);}
-function torus(x,y,z,r,t,c,e){const m=new THREE.Mesh(new THREE.TorusGeometry(r,t,10,24),new THREE.MeshStandardMaterial({color:c,emissive:e||c,emissiveIntensity:1.0,transparent:true,opacity:0.9}));m.position.set(x,y,z);return addW(m);}
+
+// ═══════════════════════════════════════════════════════════
+// WAVE A: единый построитель примитивов + пул материалов.
+// Кэш ключей → одна geometry, один material на весь мир.
+// Экономия: 2000–5000 GPU-буферов на большую карту.
+// ═══════════════════════════════════════════════════════════
+const _geoCache=new Map();
+const _matCache=new Map();
+const _geoKey={
+  box:(w,h,d)=>'b|'+w.toFixed(2)+'|'+h.toFixed(2)+'|'+d.toFixed(2),
+  cyl:(rt,rb,h,s)=>'c|'+rt.toFixed(2)+'|'+rb.toFixed(2)+'|'+h.toFixed(2)+'|'+(s||8),
+  cone:(r,h,s)=>'n|'+r.toFixed(2)+'|'+h.toFixed(2)+'|'+(s||7),
+  sph:(r,w,h)=>'s|'+r.toFixed(2)+'|'+(w||10)+'|'+(h||8),
+  tor:(r,t,w,s)=>'t|'+r.toFixed(2)+'|'+t.toFixed(2)+'|'+(w||10)+'|'+(s||24),
+  pad:(r)=>'p|'+r.toFixed(2)
+};
+function _geo(key,builder){
+  let g=_geoCache.get(key);
+  if(!g){g=builder();_geoCache.set(key,g);}
+  return g;
+}
+function _mat(key,opts){
+  let m=_matCache.get(key);
+  if(!m){m=new THREE.MeshStandardMaterial(opts);_matCache.set(key,m);}
+  return m;
+}
+function _matKey(color,o){
+  return 'c'+(color>>>0).toString(16)+'|'+(o.m||0).toFixed(2)+'|'+(o.r||0.85).toFixed(2)+'|'+(o.e||0).toString(16)+'|'+(o.ei||1).toFixed(2)+'|'+(o.t?1:0)+'|'+(o.op||1);
+}
+function _clearGeoMatCache(){
+  // вызывается из clearWorld — освобождает все shared-буферы
+  _geoCache.forEach(g=>{try{g.dispose();}catch(e){}});
+  _geoCache.clear();
+  _matCache.forEach(m=>{try{m.dispose();}catch(e){}});
+  _matCache.clear();
+}
+
+function ground(c,r){
+  const key='g|'+WORLD_SIZE+'|'+c+'|'+r;
+  const g=_geo(key,()=>new THREE.PlaneGeometry(WORLD_SIZE,WORLD_SIZE));
+  const m=_mat('gm|'+c+'|'+r,{color:c,roughness:r||0.9});
+  const mesh=new THREE.Mesh(g,m);
+  mesh.rotation.x=-PI/2;mesh.receiveShadow=true;return addW(mesh);
+}
+function pad(x,z,r,col){
+  const g=_geo(_geoKey.pad(r),()=>new THREE.CylinderGeometry(r,r,0.1,24));
+  const m=_mat('pad|'+col,{color:0x1a1a1a,emissive:col||0x002244,emissiveIntensity:0.8});
+  const p=new THREE.Mesh(g,m);p.position.set(x,0.06,z);return addW(p);
+}
+function box(x,y,z,w,h,d,c,o){
+  o=o||{};
+  const g=_geo(_geoKey.box(w,h,d),()=>new THREE.BoxGeometry(w,h,d));
+  const m=_mat(_matKey(c,o),{color:c,metalness:o.m||0,roughness:o.r||0.85,emissive:o.e||0x000000,emissiveIntensity:o.ei||1});
+  const mesh=new THREE.Mesh(g,m);mesh.position.set(x,y,z);
+  if(!o.ns)mesh.castShadow=true;
+  return addW(mesh);
+}
+function cyl(x,y,z,rt,rb,h,c,s){
+  const g=_geo(_geoKey.cyl(rt,rb,h,s),()=>new THREE.CylinderGeometry(rt,rb,h,s||8));
+  const m=_mat('cyl|'+c,{color:c,roughness:0.85});
+  const mesh=new THREE.Mesh(g,m);mesh.position.set(x,y,z);mesh.castShadow=true;return addW(mesh);
+}
+function cone(x,yb,z,r,h,c){
+  const g=_geo(_geoKey.cone(r,h),()=>new THREE.ConeGeometry(r,h,7));
+  const m=_mat('cone|'+c,{color:c,flatShading:true,roughness:0.95});
+  const mesh=new THREE.Mesh(g,m);mesh.position.set(x,yb+h/2,z);mesh.castShadow=true;return addW(mesh);
+}
+function sph(x,y,z,r,c,e){
+  const g=_geo(_geoKey.sph(r),()=>new THREE.SphereGeometry(r,10,8));
+  const m=_mat('sph|'+c+'|'+e,{color:c,emissive:e||0x000000,emissiveIntensity:1.2});
+  const mesh=new THREE.Mesh(g,m);mesh.position.set(x,y,z);return addW(mesh);
+}
+function torus(x,y,z,r,t,c,e){
+  const g=_geo(_geoKey.tor(r,t),()=>new THREE.TorusGeometry(r,t,10,24));
+  const m=_mat('tor|'+c+'|'+e,{color:c,emissive:e||c,emissiveIntensity:1.0,transparent:true,opacity:0.9});
+  const mesh=new THREE.Mesh(g,m);mesh.position.set(x,y,z);return addW(mesh);
+}
 function obs(x,z,r,h,t){obstacles.push({x,z,r,h,type:t||'generic'});}
 
 // ============================================================
@@ -6758,14 +7923,16 @@ function obs(x,z,r,h,t){obstacles.push({x,z,r,h,type:t||'generic'});}
 function buildNeonWorld(){
   scene.fog=new THREE.Fog(0x0a0018,30,240);
   ground(0x050510,0.92);
+  // WAVE D FIX: линии дорог рисуются на y=0.04, пад — на y=0.06.
+  // Пад теперь выше, z-fighting убран.
   for(let i=-8;i<=8;i++){
     const c=i%2===0?0x00ffff:0xff00aa;
     const s1=new THREE.Mesh(new THREE.PlaneGeometry(0.5,WORLD_SIZE),new THREE.MeshBasicMaterial({color:c}));
-    s1.rotation.x=-PI/2;s1.position.set(i*12,0.04,0);addW(s1);
+    s1.rotation.x=-PI/2;s1.position.set(i*12,0.03,0);addW(s1);
     const s2=new THREE.Mesh(new THREE.PlaneGeometry(WORLD_SIZE,0.5),new THREE.MeshBasicMaterial({color:i%2===0?0xff00ff:0x00ff88}));
-    s2.rotation.x=-PI/2;s2.position.set(0,0.04,i*12);addW(s2);
+    s2.rotation.x=-PI/2;s2.position.set(0,0.03,i*12);addW(s2);
   }
-  pad(0,0,4,0x00ffff);
+  pad(0,0,4.5,0x00ffff);
   const palettes=[[0x00ffff,0xff00aa],[0xff00ff,0x00ff88],[0xffaa00,0x00aaff]];
   const _bms=Math.max(1,Math.round(3*DEV.worldScale));
   for(let bx=-_bms;bx<=_bms;bx++)for(let bz=-_bms;bz<=_bms;bz++){
@@ -6795,12 +7962,33 @@ function buildNeonWorld(){
     }
     obs(px,pz,Math.max(w,d)/2,h,'building');
   }
-  const _nDr=Math.max(0,Math.round(200*DEV.particleScale));
+  // ═══════════════════════════════════════════════════════════
+  // WAVE D FIX: 200 капель дождя висели в ясную погоду.
+  // Теперь — точечная неоновая «морось» (30 частиц) только как
+  // атмосферный элемент, а НЕ имитация погоды. Реальный дождь
+  // включается через applyWeather('rain').
+  // ═══════════════════════════════════════════════════════════
+  const _nDr=Math.max(0,Math.round(30*DEV.particleScale));
+  const _mistPositions=new Float32Array(_nDr*3);
+  const _mistColors=new Float32Array(_nDr*3);
   for(let i=0;i<_nDr;i++){
-    const x=(Math.random()-0.5)*250,z=(Math.random()-0.5)*250;
-    const drop=new THREE.Mesh(new THREE.PlaneGeometry(0.04,2),new THREE.MeshBasicMaterial({color:0x88ddff,transparent:true,opacity:0.35}));
-    drop.position.set(x,3+Math.random()*35,z);addW(drop);
+    _mistPositions[i*3]=(Math.random()-0.5)*250;
+    _mistPositions[i*3+1]=3+Math.random()*35;
+    _mistPositions[i*3+2]=(Math.random()-0.5)*250;
+    const _c=Math.random()<0.5?0x00ffff:0xff00aa;
+    const _col=new THREE.Color(_c);
+    _mistColors[i*3]=_col.r;
+    _mistColors[i*3+1]=_col.g;
+    _mistColors[i*3+2]=_col.b;
   }
+  const _mistGeo=new THREE.BufferGeometry();
+  _mistGeo.setAttribute('position',new THREE.BufferAttribute(_mistPositions,3));
+  _mistGeo.setAttribute('color',new THREE.BufferAttribute(_mistColors,3));
+  const _mistPts=new THREE.Points(_mistGeo,new THREE.PointsMaterial({
+    size:0.5,vertexColors:true,transparent:true,opacity:0.7,
+    depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true
+  }));
+  addW(_mistPts);
   for(let i=0;i<8;i++){
     const x=(Math.random()-0.5)*180,z=(Math.random()-0.5)*180;
     const holo=new THREE.Mesh(new THREE.OctahedronGeometry(2,0),new THREE.MeshBasicMaterial({color:0x00ffcc,transparent:true,opacity:0.35,wireframe:true}));
@@ -6842,6 +8030,12 @@ function buildIslandsWorld(){
     }
     obs(x,z,size,y+15,'island');
   }
+  // ═══════════════════════════════════════════════════════════
+  // WAVE D FIX: мосты на r=90 висели в воздухе (острова случайны).
+  // Теперь строим СВОЮ опорную платформу под каждый мост — 
+  // неоновая колонна-якорь, видимая глазу. Мосты становятся
+  // логичными «парящими переходами» между маячными платформами.
+  // ═══════════════════════════════════════════════════════════
   for(let i=0;i<6;i++){
     const a1=i*PI/3,a2=(i+1)*PI/3;
     const x1=Math.cos(a1)*90,z1=Math.sin(a1)*90;
@@ -6849,8 +8043,24 @@ function buildIslandsWorld(){
     const y=25;
     const len=Math.sqrt((x2-x1)**2+(z2-z1)**2);
     const ang=Math.atan2(z2-z1,x2-x1);
+    // Сам мост
     const bridge=new THREE.Mesh(new THREE.BoxGeometry(len,0.3,1.5),new THREE.MeshStandardMaterial({color:0x8a6a3a,roughness:0.9}));
-    bridge.position.set((x1+x2)/2,y,(z1+z2)/2);bridge.rotation.y=-ang;bridge.castShadow=true;addW(bridge);
+    bridge.position.set((x1+x2)/2,y,(z1+z2)/2);
+    bridge.rotation.y=-ang;bridge.castShadow=true;addW(bridge);
+    // Перила
+    for(let s=-1;s<=1;s+=2){
+      const rail=new THREE.Mesh(new THREE.BoxGeometry(len,0.15,0.1),new THREE.MeshStandardMaterial({color:0xb366ff,emissive:0x5a2a9a,emissiveIntensity:0.9}));
+      rail.position.set((x1+x2)/2+s*Math.sin(-ang)*0.75,y+0.7,(z1+z2)/2+s*Math.cos(-ang)*0.75);
+      rail.rotation.y=-ang;addW(rail);
+    }
+    // Якорь-платформа на каждом конце (визуальная опора)
+    [[x1,z1],[x2,z2]].forEach(([bx,bz])=>{
+      const base=new THREE.Mesh(new THREE.CylinderGeometry(2.5,3.5,1.2,10),new THREE.MeshStandardMaterial({color:0x3a4a6a,emissive:0x1a2a4a,emissiveIntensity:0.6}));
+      base.position.set(bx,y-0.8,bz);base.castShadow=true;addW(base);
+      // Маяк под платформой
+      const beacon=new THREE.Mesh(new THREE.SphereGeometry(0.35,8,6),new THREE.MeshBasicMaterial({color:0x00ffcc}));
+      beacon.position.set(bx,y-2.2,bz);addW(beacon);
+    });
   }
   for(let i=0;i<Math.max(8,Math.round(40*DEV.worldScale));i++){
     const x=(Math.random()-0.5)*500,z=(Math.random()-0.5)*500,y=45+Math.random()*50;
@@ -6887,7 +8097,7 @@ function buildCanyonWorld(){
     bridge.position.set(0,25,pz);bridge.castShadow=true;addW(bridge);
     for(let s=-1;s<=1;s+=2)box(s*50,12.5,pz,2,25,4,0x8a6a4a,{r:0.9});
   }
-  for(let i=0;i<30;i++){
+  for(let i=0;i<Math.max(6,Math.round(30*DEV.worldScale));i++){
     const x=(Math.random()-0.5)*200,z=(Math.random()-0.5)*400;
     if(Math.abs(x)<12&&Math.abs(z)<12)continue;
     const h=6+Math.random()*20;
@@ -6925,17 +8135,22 @@ function buildVolcanoWorld(){
   const lavaPool=new THREE.Mesh(new THREE.CircleGeometry(15,20),new THREE.MeshBasicMaterial({color:0xff5500,transparent:true,opacity:0.9}));
   lavaPool.rotation.x=-PI/2;lavaPool.position.set(0,93.5,0);addW(lavaPool);
   obs(0,0,70,100,'volcano');
+  // ═══════════════════════════════════════════════════════════
+  // WAVE D FIX: было y=50-j*10 (при j=9 → y=-40, под землёй).
+  // Считаем y так, чтобы лава текла по склону от вершины (y≈48)
+  // к подножию (y≈4), используя 9 сегментов.
+  // ═══════════════════════════════════════════════════════════
   for(let i=0;i<4;i++){
     const a=i*PI/2+Math.random()*0.5;
     for(let j=1;j<10;j++){
-      const r=70-j*7;
+      const r=70-j*7;                 // 63 … 7
       const x=Math.cos(a)*r,z=Math.sin(a)*r;
-      const y=50-j*10;
+      const y=48-j*5;                 // 43 … 3 — всё над землёй
       const river=new THREE.Mesh(new THREE.CircleGeometry(1.5,8),new THREE.MeshBasicMaterial({color:0xff4400,transparent:true,opacity:0.75}));
       river.rotation.x=-PI/2;river.position.set(x,y,z);addW(river);
     }
   }
-  for(let i=0;i<10;i++){
+  for(let i=0;i<Math.max(3,Math.round(10*DEV.worldScale));i++){
     const a=i*PI*2/10+Math.random()*0.4;
     const r=120+Math.random()*120;
     const x=Math.cos(a)*r,z=Math.sin(a)*r;
@@ -6956,8 +8171,8 @@ function buildVolcanoWorld(){
     const x=(Math.random()-0.5)*300,z=(Math.random()-0.5)*300,y=5+Math.random()*60;
     sph(x,y,z,0.4,0x555555,0x333333).material.transparent=true;
   }
-  // WAVE FIX 2: pad у главного кратера (декор) + стартовая площадка
-  pad(0,3,4,0xff4400);
+  // WAVE D FIX: убираем pad в центре кратера — он был под лавой и
+  // никогда не виден. Пад нужен только у реальной стартовой площадки.
   // Стартовая площадка на x=90 — совпадает с WORLD_SPAWN.volcano
   pad(90,10,5,0xffaa00);
   // Небольшая оградка у спавна, чтобы было видно ориентир
@@ -7066,14 +8281,14 @@ function buildRuinsWorld(){
     box(x,h/2,z,w,h,1.2,0xa89878,{r:0.9});
     obs(x,z,w/2,h,'wall');
   }
-  for(let i=0;i<15;i++){
+  for(let i=0;i<Math.max(5,Math.round(15*DEV.worldScale));i++){
     const a=i*PI*2/15,r=56;
     const x=Math.cos(a)*r,z=Math.sin(a)*r;
     cyl(x,4,z,0.15,0.2,6,0x3a6a2a,5);
   }
-  pad(0,0,5,0xffaa44);
-  // WAVE FIX 2: стартовая площадка на (38, 0) — совпадает с WORLD_SPAWN.ruins
-  pad(38,0,4,0xffcc44);
+  // WAVE D FIX: pad(0,0,5) был под пирамидой (y=0, невидим) — убран.
+  // Стартовая площадка на (38, 0) — оставлена, она работает.
+  pad(38,0,4.5,0xffcc44);
   // 4 ориентира вокруг старта
   for(let a=0;a<4;a++){
     const ang=a*PI/2+PI/4;
@@ -7090,7 +8305,7 @@ function buildRuinsWorld(){
 function buildIndustrialWorld(){
   scene.fog=new THREE.Fog(0x5a4a3a,50,350);
   ground(0x4a4038,0.95);
-  for(let i=0;i<10;i++){
+  for(let i=0;i<Math.max(3,Math.round(10*DEV.worldScale));i++){
     const a=i*PI*2/10+Math.random()*0.3;
     const r=70+Math.random()*70;
     const x=Math.cos(a)*r,z=Math.sin(a)*r;
@@ -7170,13 +8385,30 @@ function buildBambooWorld(){
     cone(x,2.2,z,0.7,0.6,0x4a3a2a);
     obs(x,z,0.6,2.5,'lamp');
   }
-  const water=new THREE.Mesh(new THREE.CircleGeometry(10,32),new THREE.MeshStandardMaterial({color:0x225577,transparent:true,opacity:0.85,roughness:0.05,metalness:0.6}));
-  water.rotation.x=-PI/2;water.position.set(0,0.06,0);addW(water);
+  // ═══════════════════════════════════════════════════════════
+  // WAVE D FIX: пруд сдвинут от центральной поляны, где спавн.
+  // Было: вода CircleGeometry(10) в (0,0) + лилии в r=8 — дрон
+  // спавнился прямо в воде. Стало: пруд на (32,0,-32), r=10,
+  // лилии внутри пруда, рядом с ним — стартовый pad.
+  // ═══════════════════════════════════════════════════════════
+  const _pondX=32, _pondZ=-32, _pondR=10;
+  const water=new THREE.Mesh(new THREE.CircleGeometry(_pondR,32),new THREE.MeshStandardMaterial({color:0x225577,transparent:true,opacity:0.85,roughness:0.05,metalness:0.6}));
+  water.rotation.x=-PI/2;water.position.set(_pondX,0.06,_pondZ);addW(water);
+  // Камыш/ободок пруда
+  for(let i=0;i<20;i++){
+    const a=i*PI*2/20;
+    const rx=_pondX+Math.cos(a)*_pondR*1.05;
+    const rz=_pondZ+Math.sin(a)*_pondR*1.05;
+    cyl(rx,0.5,rz,0.06,0.08,1.0,0x5a7a3a,5);
+  }
+  // Лилии — внутри пруда
   for(let i=0;i<8;i++){
-    const a=Math.random()*PI*2,r=Math.random()*8;
+    const a=Math.random()*PI*2,r=Math.random()*_pondR*0.8;
     const lily=new THREE.Mesh(new THREE.CircleGeometry(0.6,8),new THREE.MeshBasicMaterial({color:0x3a8a3a,side:THREE.DoubleSide}));
-    lily.rotation.x=-PI/2;lily.position.set(Math.cos(a)*r,0.1,Math.sin(a)*r);addW(lily);
-    if(Math.random()<0.4)sph(Math.cos(a)*r,0.15,Math.sin(a)*r,0.2,0xff88cc,0xff4488);
+    lily.rotation.x=-PI/2;
+    lily.position.set(_pondX+Math.cos(a)*r,0.1,_pondZ+Math.sin(a)*r);
+    addW(lily);
+    if(Math.random()<0.4)sph(_pondX+Math.cos(a)*r,0.15,_pondZ+Math.sin(a)*r,0.2,0xff88cc,0xff4488);
   }
   for(let i=0;i<3;i++){
     const a=i*PI*2/3,r=45;
@@ -7201,7 +8433,15 @@ function buildBambooWorld(){
     }
     obs(x,z,1.5,8,'tree');
   }
-  pad(0,0,3,0x00ff88);
+  // WAVE D FIX: спавн-пад на центральной поляне + 4 указателя
+  pad(0,0,4,0x00ff88);
+  for(let a=0;a<4;a++){
+    const ang=a*PI/2+PI/4;
+    const rx=Math.cos(ang)*3.5;
+    const rz=Math.sin(ang)*3.5;
+    cyl(rx,1.0,rz,0.15,0.18,2,0x00ff88,6);
+    sph(rx,2.2,rz,0.28,0x00ffcc,0x00ff88);
+  }
 }
 
 // ============================================================
@@ -7211,7 +8451,7 @@ function buildOrbitWorld(){
   scene.fog=new THREE.Fog(0x000005,200,700);
   const earth=new THREE.Mesh(new THREE.SphereGeometry(150,24,16),new THREE.MeshStandardMaterial({color:0x2255aa,roughness:0.85,emissive:0x0a1a3a,emissiveIntensity:0.5}));
   earth.position.set(0,-200,0);earth.userData.worldObject=true;scene.add(earth);
-  for(let i=0;i<20;i++){
+  for(let i=0;i<Math.max(6,Math.round(20*DEV.worldScale));i++){
     const a=Math.random()*PI*2,b=Math.random()*PI-PI/2;
     const r=150;
     const c=new THREE.Mesh(new THREE.SphereGeometry(10+Math.random()*8,7,5),new THREE.MeshBasicMaterial({color:0x3a6a2a}));
@@ -7244,12 +8484,30 @@ function buildOrbitWorld(){
   }
   const ring=new THREE.Mesh(new THREE.TorusGeometry(35,0.5,8,40),new THREE.MeshStandardMaterial({color:0x6688cc,metalness:0.8,emissive:0x2244aa,emissiveIntensity:0.4}));
   ring.rotation.x=PI/2;ring.position.y=10;addW(ring);
-  const _nStars=Math.max(30,Math.round(300*DEV.particleScale));
+  // ═══════════════════════════════════════════════════════════
+  // WAVE D FIX: 30 отдельных mesh-звёзд → 1 Points = −29 draw-calls.
+  // Плюс на телефоне это заметно.
+  // ═══════════════════════════════════════════════════════════
+  const _nStars=Math.max(200,Math.round(500*DEV.particleScale));
+  const _starPos=new Float32Array(_nStars*3);
+  const _starCol=new Float32Array(_nStars*3);
   for(let i=0;i<_nStars;i++){
-    const x=(Math.random()-0.5)*600,z=(Math.random()-0.5)*600,y=Math.random()*300+50;
-    const s=sph(x,y,z,0.3,0xffffff,0xffffff);
-    s.material.transparent=true;s.material.opacity=0.9;
+    _starPos[i*3]=(Math.random()-0.5)*900;
+    _starPos[i*3+1]=Math.random()*400+50;
+    _starPos[i*3+2]=(Math.random()-0.5)*900;
+    const tint=0.7+Math.random()*0.3;
+    _starCol[i*3]=tint;
+    _starCol[i*3+1]=tint;
+    _starCol[i*3+2]=1.0;
   }
+  const _starGeo=new THREE.BufferGeometry();
+  _starGeo.setAttribute('position',new THREE.BufferAttribute(_starPos,3));
+  _starGeo.setAttribute('color',new THREE.BufferAttribute(_starCol,3));
+  const _stars=new THREE.Points(_starGeo,new THREE.PointsMaterial({
+    size:1.8,vertexColors:true,transparent:true,opacity:0.95,
+    depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true
+  }));
+  addW(_stars);
   for(let i=0;i<Math.max(6,Math.round(30*DEV.worldScale));i++){
     const x=(Math.random()-0.5)*250,z=(Math.random()-0.5)*250,y=5+Math.random()*50;
     const r=0.5+Math.random()*1.8;
@@ -7285,8 +8543,9 @@ function buildTrackWorld(){
     const x2=Math.cos(a)*57,z2=Math.sin(a)*57;
     box(x2,0.5,z2,1.5,1,1.5,i%2===0?0xff2222:0xffffff,{e:i%2===0?0x880000:0x444444,ei:0.4});
   }
-  window.rings=[];
-  for(let i=0;i<12;i++){
+window.rings=[];
+const _nRings=Math.max(6,Math.round(12*DEV.worldScale));
+for(let i=0;i<_nRings;i++){
     const a=i*PI*2/12;
     const x=Math.cos(a)*75,z=Math.sin(a)*75;
     const ring=torus(x,8,z,3.5,0.3,0x00ffff,0x00ffff);
@@ -7316,7 +8575,16 @@ function buildTrackWorld(){
     const x=Math.cos(a)*125,z=Math.sin(a)*125;
     box(x,8,z,12,4,0.3,[0xff2222,0x22ff44,0x2244ff,0xffff22,0xff22ff,0x22ffff][i],{e:[0x880000,0x228800,0x222288,0x888800,0x880088,0x008888][i],ei:0.8});
   }
+  // WAVE D FIX: пад на спавне + пад в центре трека
   pad(0,0,4,0x00ff00);
+  pad(60,0,4,0x00ffcc);
+  // 4 указателя вокруг старта
+  for(let a=0;a<4;a++){
+    const ang=a*PI/2+PI/4;
+    const rx=60+Math.cos(ang)*3.5;
+    const rz=Math.sin(ang)*3.5;
+    cyl(rx,0.8,rz,0.15,0.18,1.6,0x00ffcc,6);
+  }
 }
 
 // ============================================================
@@ -7334,7 +8602,7 @@ function buildOceanWorld(){
     posAttr.setZ(i,Math.sin(x*0.08)*Math.cos(y*0.12)*1.8+Math.sin(x*0.25+y*0.15)*0.6);
   }
   posAttr.needsUpdate=true;addW(sea);
-  for(let i=0;i<12;i++){
+  for(let i=0;i<Math.max(4,Math.round(12*DEV.worldScale));i++){
     const a=i*PI*2/12+Math.random()*0.3;
     const r=60+Math.random()*200;
     const x=Math.cos(a)*r,z=Math.sin(a)*r;
@@ -7383,6 +8651,25 @@ function buildOceanWorld(){
   box(-100,2,100,4,2,10,0x8a6a3a,{r:0.8});
   cyl(-100,5,100,0.3,0.3,6,0x3a2a1a,5);
   obs(-100,100,3,4,'boat');
+  // ═══════════════════════════════════════════════════════════
+  // WAVE D FIX: стартовая платформа висела на y=3 без опор.
+  // Добавляем 4 наклонных опоры + неоновое свечение, чтобы
+  // читалось как «морская платформа».
+  // ═══════════════════════════════════════════════════════════
+  for(let a=0;a<4;a++){
+    const ang=a*PI/2+PI/4;
+    const ox=Math.cos(ang)*3.2;
+    const oz=Math.sin(ang)*3.2;
+    // Нога от y=3 вниз к воде
+    cyl(ox,1.5,oz,0.18,0.22,3,0x556677,6);
+    // Пята у поверхности воды
+    sph(ox,0.15,oz,0.35,0x334455,0x001a33);
+  }
+  // Верхний ободок платформы
+  const _rimGeo=new THREE.TorusGeometry(3.1,0.12,8,24);
+  const _rimMat=new THREE.MeshStandardMaterial({color:0x00aaff,emissive:0x0066aa,emissiveIntensity:1.2,transparent:true,opacity:0.9});
+  const _rim=new THREE.Mesh(_rimGeo,_rimMat);
+  _rim.rotation.x=PI/2;_rim.position.set(0,3.1,0);addW(_rim);
   pad(0,3,3,0x00aaff);
 }
 
@@ -7508,8 +8795,10 @@ function buildCoastWorld(){
   ground(0xd6c69a,1.0);pad(0,0,3,0x224466);
   const ocean=new THREE.Mesh(new THREE.PlaneGeometry(400,WORLD_SIZE),new THREE.MeshStandardMaterial({color:0x2266aa,transparent:true,opacity:0.85,roughness:0.05,metalness:0.7}));
   ocean.rotation.x=-PI/2;ocean.position.set(-300,0.04,0);addW(ocean);
-  for(let i=0;i<14;i++){
-    const a=i*PI*2/14,r=80+Math.random()*60;
+  const _nT=Math.max(4,Math.round(14*DEV.worldScale));
+  for(let i=0;i<_nT;i++){
+    const a=i*PI*2/14+Math.random()*0.3;
+    const r=80+Math.random()*60;
     const x=Math.cos(a)*r,z=Math.sin(a)*r;
     cyl(x,8,z,0.6,1.0,16,0xf0f0f0,6);
     for(let b=0;b<3;b++){
@@ -7519,7 +8808,10 @@ function buildCoastWorld(){
     obs(x,z,1.5,16,'tower');
   }
 }
+// WAVE A: на мобиле бесконечная трасса строит 60% объектов, чтобы не забивать GPU
+let _infWalls=[];    // реестр стен для переиспользования
 function buildInfiniteTrackWorld(){
+  _infWalls=[];
   scene.fog=new THREE.Fog(0x080020,60,300);
   ground(0x050510,0.95);
   for(let i=0;i<Math.max(30,Math.round(200*DEV.worldScale));i++){
@@ -7527,10 +8819,14 @@ function buildInfiniteTrackWorld(){
     const g=new THREE.Mesh(new THREE.PlaneGeometry(30,0.5),new THREE.MeshBasicMaterial({color:i%2===0?0x00ffff:0xff00ff}));
     g.rotation.x=-PI/2;g.position.set(0,0.03,pz);addW(g);
   }
+  // WAVE A: все стены используют shared geometry/material по ключу цвета
   const _nWl=Math.max(15,Math.round(80*DEV.worldScale));
+  const _wallGeo=_geo('infwall',()=>new THREE.BoxGeometry(2,20,28));
+  const _wallMatL=_mat('infwallL',{color:0x111133,emissive:0x001166,emissiveIntensity:0.5});
+  const _wallMatR=_mat('infwallR',{color:0x111133,emissive:0x660033,emissiveIntensity:0.5});
   for(let side=-1;side<=1;side+=2)for(let i=0;i<_nWl;i++){
     const pz=-i*30,h=20;
-    const wall=new THREE.Mesh(new THREE.BoxGeometry(2,h,28),new THREE.MeshStandardMaterial({color:0x111133,emissive:side<0?0x001166:0x660033,emissiveIntensity:0.5}));
+    const wall=new THREE.Mesh(_wallGeo,side<0?_wallMatL:_wallMatR);
     wall.position.set(side*20,h/2,pz);wall.userData.worldObject=true;scene.add(wall);
     obs(side*20,pz-10,2,h,'wall');
     obs(side*20,pz,2,h,'wall');
@@ -7547,7 +8843,8 @@ const WORLD_BUILDERS={
   industrial:buildIndustrialWorld,bamboo:buildBambooWorld,orbit:buildOrbitWorld,
   track:buildTrackWorld,ocean:buildOceanWorld,arena:buildArenaWorld,
   tutorial:buildTutorialWorld,physicsLab:buildLabWorld,ghost:buildGhostWorld,
-  freeWind:buildCoastWorld,physicsQuiz:buildInfiniteTrackWorld
+  coast:buildCoastWorld,        // ← ключ 'coast' соответствует алиасу freeWind
+  physicsQuiz:buildInfiniteTrackWorld
 };
 function createWorld(name){
   clearWorld();
@@ -7556,12 +8853,17 @@ function createWorld(name){
   createGodRays();                 // были только при initThree → терялись после 1-й смены
   if(name==='physicsQuiz')buildInfiniteRings();
 }
+// ═══════════════════════════════════════════════════════════
+// WAVE D FIX: buildCoastWorld был dead code — алиас 'freeWind'
+// вёл на 'ocean', и береговая линия никогда не использовалась.
+// Теперь freeWind = 'coast' — используем весь потенциал мира.
+// ═══════════════════════════════════════════════════════════
 const SCENE_ALIAS={
   free:{world:'islands',tag:'🌍 Свободный полёт'},
   rings:{world:'track',tag:'🏁 Гонка через кольца'},
   obstacles:{world:'bamboo',tag:'🌲 Лес с препятствиями'},
   landing:{world:'ruins',tag:'🛬 Точная посадка'},
-  freeWind:{world:'ocean',tag:'💨 Полёт с ветром'},
+  freeWind:{world:'coast',tag:'💨 Полёт с ветром'},
   delivery:{world:'industrial',tag:'🚚 Доставка груза'},
   rescue:{world:'arctic',tag:'🆘 Поиск и спасение'},
   follow:{world:'neon',tag:'👁 Follow me'}
@@ -8405,6 +9707,9 @@ function crash(){
   playSfxBladeStrike();     // WAVE 8: хруст лопастей
   sayCrash();
   physics.vel.set(0,0,0);physics.omega.set(0,0,0);
+  // WAVE D FIX: не даём VRS «залипнуть» после аварии
+  physics.vrsIntensity=0;
+  if(window._vMonState)window._vMonState.vrs=false;
   // ═══ WAVE 4: повреждения винтов при столкновении ═══
   const dmgCount=1+Math.floor(Math.random()*3);
   for(let i=0;i<dmgCount;i++){
@@ -8433,21 +9738,33 @@ function crash(){
 // ═══════════════════════════════════════════════════════════════
 const WORLD_SPAWN={
   // main-конус r=70, втор. конусы r≥120 → безопасно 90
+  // ═══════════════════════════════════════════════════════════
+  // WAVE D: полный набор безопасных спавнов.
+  // Ключи — финальные имена миров ПОСЛЕ resolveScene.
+  // ═══════════════════════════════════════════════════════════
+  neon:      {x:  0, y:  0.6, z: 0},   // пад на y=0.06
+  islands:   {x:  0, y:  0.6, z: 0},   // центральный пад
+  canyon:    {x:  0, y:  0.6, z: 0},   // дно каньона
+  volcano:   {x: 90, y: 10,   z: 0},
   volcano:   {x: 90, y: 10, z: 0},
-  // пирамида obs r=15, колонны r=55 → безопасно 38
   ruins:     {x: 38, y:  8, z: 0},
-  // бамбук исключает |x|<8 и |z|<8 → центр поляны безопасен
-  bamboo:    {x:  0, y:  0.5, z: 0},
+  arctic:    {x:  0, y:  0.6, z: 0},
+  industrial:{x:  0, y:  0.6, z: 0},
+  // WAVE D: бамбук — пруд сдвинут на (32,-32), центр свободен
+  bamboo:    {x:  0, y:  0.6, z: 0},
   // кристалл sph(0,8,0,3), порталы r=55 → смещаемся
   arena:     {x: 15, y:  8, z: 15},
   // orbit: pad на y=0, но орбитальная станция парит на y=4..14
   orbit:     {x:  0, y:  5, z: 0},
   // ocean: pad на y=3 (платформа), на воде иначе утонет
   ocean:     {x:  0, y:  3.5, z: 0},
-  // track: pad на y=0, кольца вокруг r=75 — старт в центре
-  track:     {x:  0, y:  8, z: 0},
+  // WAVE D FIX: кольца на r=75 — старт на r=60 (близко к первому кругу),
+  // чтобы игрок сразу видел трессу, а не кружил вокруг центра.
+  track:     {x: 60, y:  8, z: 0},
   // physicsQuiz (бесконечная трасса) — спавн выше пола
-  physicsQuiz:{x: 0, y:  8, z: 0}
+  physicsQuiz:{x: 0, y:  8, z: 0},
+  // WAVE D FIX: coast — берег у левого края (океан слева)
+  coast:     {x: 60, y:  3, z: 0}
 };
 function startScene(name){
   document.getElementById('menu').style.display='none';
@@ -8551,6 +9868,19 @@ function startScene(name){
   physics.reset({x:_sp.x,y:_sp.y,z:_sp.z});
   physics._altHoldTarget=_sp.y;
   lastPhysicsPosZ=physics.pos.z;
+  // ═══════════════════════════════════════════════════════════════
+  // WAVE D FIX: принудительно обнуляем gust/ветер на старте сцены,
+  // чтобы накопленный от прошлой сцены urbanGustVec не сдувал дрон.
+  // ═══════════════════════════════════════════════════════════════
+  urbanGustVec.set(0,0,0);
+  if(windModel){
+    windModel.gust.set(0,0,0);
+    windModel.turb.set(0,0,0);
+    windModel.current.set(0,0,0);
+  }
+  // WAVE D FIX: сбрасываем VRS и монитор при старте сцены
+  if(physics){physics.vrsIntensity=0;}
+  if(window._vMonState)window._vMonState.vrs=false; 
   crashState=0;resetTrail();
   telAlt=[];telPitch=[];telThrottle=[];telForce=[];telBattery=[];
   ghostRecording=[];ghostRecordingQuat=[];ghostRecordingThrottle=[];
@@ -8633,11 +9963,22 @@ function startScene(name){
   showPreflightChecklist();
 
 
-  // WAVE 2 spawn
-  spawnBirds();
-  spawnOtherDrones();
-  spawnGroundTraffic();
-  spawnCampfires();
+  // ═══════════════════════════════════════════════════════════════
+  // WAVE D FIX: спавн живности/техники — по биому мира.
+  // До этого машины ездили в лесу, костры горели в неоне,
+  // птицы летали в космосе.
+  // ═══════════════════════════════════════════════════════════════
+  const _biome2=WORLD_TO_BIOME[world]||'nature';
+  const _hasCars  =(_biome2==='urban'||_biome2==='arena');
+  const _hasBirds =(_biome2!=='space'&&_biome2!=='volcano');
+  const _hasFires =(_biome2==='nature'||_biome2==='arctic'||
+                    _biome2==='ocean'||_biome2==='volcano');
+  const _hasDrones=(_biome2!=='space'&&_biome2!=='ocean');
+
+  if(_hasBirds)  spawnBirds();
+  if(_hasDrones) spawnOtherDrones();
+  if(_hasCars)   spawnGroundTraffic();
+  if(_hasFires)  spawnCampfires();
   document.getElementById('envPanel').style.display='flex';
   document.getElementById('timeSlider').style.display='flex';
   document.getElementById('weatherInd').style.display='flex';
@@ -8674,7 +10015,7 @@ function startScene(name){
   updateWeatherAmbient(currentWeather);
     // WAVE 8: если микшер открыт — обновить UI
   if(mixerPanelOpen)mxSync();
-  if(name==='freeWind'){windModel.enabled=true;windModel.base.set(1.5,0,0.8);}
+  if(name==='freeWind'||name==='coast'){windModel.enabled=true;windModel.base.set(1.5,0,0.8);}
   if(name==='physicsLab'){showPhysics=true;document.getElementById('physPanel').style.display='block';}
   if(name==='ghost')showToast('👻 G — записать полёт');
   if(name==='physicsQuiz'){
@@ -9003,10 +10344,11 @@ function updatePhotoCamera(dt){
   if(Input.isDown('KeyA')){photoCamPos.x-=rx*spd*dt;photoCamPos.z-=rz*spd*dt;}
   if(Input.isDown('KeyQ'))photoCamPos.y-=spd*dt;
   if(Input.isDown('KeyE'))photoCamPos.y+=spd*dt;
-  // Применяем
+  // Применяем (WAVE A: без new Quaternion/Euler)
   camera.position.copy(photoCamPos);
-  const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(photoCamPitch,photoCamYaw,0,'YXZ'));
-  camera.quaternion.copy(q);
+  _e1.set(photoCamPitch,photoCamYaw,0,'YXZ');
+  _q1.setFromEuler(_e1);
+  camera.quaternion.copy(_q1);
   // FOV
   if(Math.abs(camera.fov-photoFovTarget)>0.05){
     camera.fov+=(photoFovTarget-camera.fov)*Math.min(1,dt*10);
@@ -9176,6 +10518,13 @@ function updateReplay(dt){
   const sl=document.getElementById('rpSlider');
   if(sl&&document.activeElement!==sl)sl.value=Math.round((replayPlayhead/maxIdx)*1000);
 }
+// ═══ WAVE MOBILE-QUALITY: look-around offset для touch-камеры ═══
+// В режимах FPV/CHASE/TOP/COCKPIT/CINEMA — тач вращает не камеру целиком,
+// а «дополнительный наклон взгляда», который плавно возвращается назад.
+// В ORBIT/FREE — тач работает как полноценный орбитальный контроллер.
+let lookOffsetYaw=0;
+let lookOffsetPitch=0;
+
 const MouseOrbit={
   isDragging:false,lastX:0,lastY:0,theta:0,phi:PI/4,userZoom:0,autoZoom:0,target:null,
   init(){
@@ -9202,6 +10551,97 @@ const MouseOrbit={
       e.preventDefault();
     },{passive:false});
     cv.style.cursor='grab';
+
+    // ═══════════════════════════════════════════════════════════
+    // WAVE MOBILE-QUALITY: touch-управление камерой
+    // 1 палец  → orbit (ORBIT/FREE) или look-offset (остальные режимы)
+    // 2 пальца → pinch-zoom
+    // Джойстики и кнопки UI обрабатывают свои тачи сами — они выше
+    // канваса по z-index, поэтому сюда их события не попадают.
+    // ═══════════════════════════════════════════════════════════
+    cv.style.touchAction='none';
+    let touchId=null,lastTX=0,lastTY=0;
+    let pinchStartDist=0,pinchStartZoom=0;
+    let touchStartedOnUI=false;
+
+    const _isUITarget=(t)=>{
+      if(!t||!t.closest)return false;
+      return !!(t.closest('.joystick')||t.closest('button')||
+                t.closest('input')||t.closest('#topright')||
+                t.closest('#mobileButtons')||t.closest('#hudSettings')||
+                t.closest('#panelManager')||t.closest('.modal-wrap')||
+                t.closest('#mixerPanel')||t.closest('#recPanel')||
+                t.closest('#photoPanel')||t.closest('#replayPanel')||
+                t.closest('#voicePanel'));
+    };
+
+    cv.addEventListener('touchstart',e=>{
+      if(photoMode)return;             // в фото свой контроллер
+      if(_isUITarget(e.target)){touchStartedOnUI=true;return;}
+      touchStartedOnUI=false;
+      if(e.touches.length===1){
+        touchId=e.touches[0].identifier;
+        lastTX=e.touches[0].clientX;
+        lastTY=e.touches[0].clientY;
+        e.preventDefault();
+      }else if(e.touches.length===2){
+        touchId=null;
+        const dx=e.touches[0].clientX-e.touches[1].clientX;
+        const dy=e.touches[0].clientY-e.touches[1].clientY;
+        pinchStartDist=Math.max(1,Math.sqrt(dx*dx+dy*dy));
+        pinchStartZoom=this.userZoom;
+        e.preventDefault();
+      }
+    },{passive:false});
+
+    cv.addEventListener('touchmove',e=>{
+      if(photoMode||touchStartedOnUI)return;
+      if(e.touches.length===1&&touchId!==null){
+        const t=Array.from(e.touches).find(x=>x.identifier===touchId);
+        if(!t)return;
+        const dx=t.clientX-lastTX;
+        const dy=t.clientY-lastTY;
+        lastTX=t.clientX;lastTY=t.clientY;
+        if(cameraMode===0||cameraMode===7){
+          // ORBIT / FREE — полноценная орбита
+          this.theta-=dx*0.008;
+          this.phi+=dy*0.008;
+          this.phi=Math.max(0.15,Math.min(PI/2-0.05,this.phi));
+        }else{
+          // Прочие режимы — look-offset
+          lookOffsetYaw-=dx*0.006;
+          lookOffsetPitch-=dy*0.006;
+          lookOffsetPitch=Math.max(-0.9,Math.min(0.9,lookOffsetPitch));
+          lookOffsetYaw=Math.max(-PI,Math.min(PI,lookOffsetYaw));
+        }
+        e.preventDefault();
+      }else if(e.touches.length===2&&pinchStartDist>0){
+        const dx=e.touches[0].clientX-e.touches[1].clientX;
+        const dy=e.touches[0].clientY-e.touches[1].clientY;
+        const dist=Math.max(1,Math.sqrt(dx*dx+dy*dy));
+        const ratio=dist/pinchStartDist;
+        if(cameraMode===0||cameraMode===7){
+          // Orbit — меняем дистанцию
+          this.userZoom=pinchStartZoom-(ratio-1)*15;
+          this.userZoom=Math.max(-5,Math.min(25,this.userZoom));
+        }else{
+          // Прочие — pinch = zoom lens (FOV)
+          setZoom(Math.max(0.5,Math.min(3.0,zoomTarget/ratio)));
+        }
+        e.preventDefault();
+      }
+    },{passive:false});
+
+    cv.addEventListener('touchend',e=>{
+      if(e.touches.length===0){touchId=null;pinchStartDist=0;touchStartedOnUI=false;}
+      else if(e.touches.length===1){
+        touchId=e.touches[0].identifier;
+        lastTX=e.touches[0].clientX;
+        lastTY=e.touches[0].clientY;
+        pinchStartDist=0;
+      }
+    },{passive:true});
+    cv.addEventListener('touchcancel',()=>{touchId=null;pinchStartDist=0;touchStartedOnUI=false;},{passive:true});
   },
   update(cam,pos,sm){
     if(!this.target)return;
@@ -9882,6 +11322,7 @@ function resetTrail(){
 // ═══════════════════════════════════════════
 
 function togglePiP(){
+  if(DEV.isLowEnd&&!pipEnabled){showToast('⚠ PiP отключён на слабых устройствах',true);return;}
   pipEnabled=!pipEnabled;
   const w=document.getElementById('pipWrap');
   if(w)w.style.display=pipEnabled?'block':'none';
@@ -9891,6 +11332,7 @@ function togglePiP(){
 }
 
 function toggleNightVision(){
+  if(DEV.isLowEnd&&!nightVisionOn){showToast('⚠ Эффект отключён на слабых устройствах',true);return;}
   nightVisionOn=!nightVisionOn;
   const f=document.getElementById('nightFilter');
   if(f)f.style.display=nightVisionOn?'block':'none';
@@ -9904,6 +11346,7 @@ function toggleNightVision(){
 }
 
 function toggleThermal(){
+  if(DEV.isLowEnd&&!thermalOn){showToast('⚠ Эффект отключён на слабых устройствах',true);return;}
   thermalOn=!thermalOn;
   const f=document.getElementById('thermalFilter');
   if(f)f.style.display=thermalOn?'block':'none';
@@ -9928,6 +11371,7 @@ function toggleShake(){
 }
 
 function toggleLensDirt(){
+  if(DEV.isLowEnd&&!lensDirtOn){showToast('⚠ Эффект отключён на слабых устройствах',true);return;}
   lensDirtOn=!lensDirtOn;
   const f=document.getElementById('lensDirt');
   if(f)f.style.display=lensDirtOn?'block':'none';
@@ -9937,6 +11381,7 @@ function toggleLensDirt(){
 }
 
 function toggleMotionBlur(){
+  if(DEV.isLowEnd&&!motionBlurOn){showToast('⚠ Эффект отключён на слабых устройствах',true);return;}
   motionBlurOn=!motionBlurOn;
   const f=document.getElementById('motionBlur');
   if(f)f.style.display=motionBlurOn?'block':'none';
@@ -10011,25 +11456,164 @@ function stopOnboardRec(){
 
 function readInput(){
   const cmd={pitch:0,roll:0,yawRate:0,throttle:0};
-  if(!isMobile){
-    // Тангаж: W/S или ↑/↓
-    if(Input.isDown('KeyW')||Input.isDown('ArrowUp'))cmd.pitch-=0.3;
-    if(Input.isDown('KeyS')||Input.isDown('ArrowDown'))cmd.pitch+=0.3;
-    // Курс: A/D
-    if(Input.isDown('KeyA'))cmd.yawRate+=2.0;
-    if(Input.isDown('KeyD'))cmd.yawRate-=2.0;
-    // Крен: Q/E или ←/→
-    if(Input.isDown('KeyQ')||Input.isDown('ArrowLeft'))cmd.roll+=0.3;
-    if(Input.isDown('KeyE')||Input.isDown('ArrowRight'))cmd.roll-=0.3;
-    // Газ: Space — вверх, Shift — вниз
-    if(Input.isDown('Space'))cmd.throttle+=0.15;
-    if(Input.isDown('ShiftLeft')||Input.isDown('ShiftRight'))cmd.throttle-=0.15;
-  }else{
-    cmd.roll=-joyRight.x*0.3;cmd.pitch=joyRight.y*0.3;
-    cmd.throttle=-joyLeft.y*1.2;cmd.yawRate=-joyLeft.x*2.0;
+
+  // ═══════════════════════════════════════════════════════════
+  // WAVE F — приоритет КЛАВИАТУРЫ над «мёртвым» геймпадом.
+  //
+  // Логика:
+  //   1. Если нажата любая клавиша полётного управления —
+  //      сразу используем клавиатуру, геймпад игнорируется.
+  //   2. Иначе используем геймпад, но ТОЛЬКО если он не «мёртвый»
+  //      (стики двигали за последние 3 сек).
+  //   3. Иначе — клавиатура (её сенса = 0, дрон не двигается).
+  // ═══════════════════════════════════════════════════════════
+  const kbdActive=
+    Input.isDown('KeyW')||Input.isDown('KeyS')||
+    Input.isDown('KeyA')||Input.isDown('KeyD')||
+    Input.isDown('KeyQ')||Input.isDown('KeyE')||
+    Input.isDown('ArrowUp')||Input.isDown('ArrowDown')||
+    Input.isDown('ArrowLeft')||Input.isDown('ArrowRight')||
+    Input.isDown('Space')||
+    Input.isDown('ShiftLeft')||Input.isDown('ShiftRight');
+
+  const useGamepad=gamepadState.connected&&!gamepadState.sticksIdle&&!kbdActive;
+
+  // 1) ГЕЙМПАД (Mode 2)
+  if(useGamepad){
+    // Левый стик: Y вверх = газ+, X вправо = yaw вправо
+    // Инвертируем Y (стик вверх → −1 в браузере)
+    cmd.throttle  += -gamepadStickL.y*1.2;
+    cmd.yawRate   += -gamepadStickL.x*2.0;
+    // Правый стик: Y вверх = pitch-, X вправо = roll+
+    cmd.pitch     +=  gamepadStickR.y*0.35;   // стик вверх = нос вверх
+    cmd.roll      += -gamepadStickR.x*0.35;   // стик вправо = крен вправо
   }
-  cmd.throttle=Math.max(-1.5,Math.min(1.5,cmd.throttle));
+
+  // 2) КЛАВИАТУРА (схема зависит от controlScheme)
+  if(!isMobile&&!useGamepad){
+    if(controlScheme==='mode2'){
+      // ═══════════════════════════════════════════════════════════
+      // WAVE G — КЛАССИЧЕСКАЯ FPV-РАСКЛАДКА (по умолчанию на ПК)
+      //   W/S или ↑/↓   → тангаж
+      //   A/D            → yaw
+      //   Q/E или ←/→   → крен
+      //   Space / Shift  → газ вверх / вниз
+      // Это привычная раскладка из v28 — восстанавливаем.
+      // ═══════════════════════════════════════════════════════════
+      if(Input.isDown('KeyW')||Input.isDown('ArrowUp'))cmd.pitch-=0.30;
+      if(Input.isDown('KeyS')||Input.isDown('ArrowDown'))cmd.pitch+=0.30;
+      if(Input.isDown('KeyA'))cmd.yawRate+=2.0;
+      if(Input.isDown('KeyD'))cmd.yawRate-=2.0;
+      if(Input.isDown('KeyQ')||Input.isDown('ArrowLeft'))cmd.roll+=0.30;
+      if(Input.isDown('KeyE')||Input.isDown('ArrowRight'))cmd.roll-=0.30;
+      if(Input.isDown('Space'))cmd.throttle+=0.15;
+      if(Input.isDown('ShiftLeft')||Input.isDown('ShiftRight'))cmd.throttle-=0.15;
+    }else if(controlScheme==='mode1'){
+      // ★ MODE 1 (старая школа) ★
+      // Левый стик (газ+yaw): W/S = газ, A/D = yaw
+      if(Input.isDown('KeyW'))cmd.throttle+=0.15;
+      if(Input.isDown('KeyS'))cmd.throttle-=0.15;
+      if(Input.isDown('KeyA'))cmd.yawRate+=2.0;
+      if(Input.isDown('KeyD'))cmd.yawRate-=2.0;
+      // Правый стик (pitch+roll): ↑/↓ = pitch, ←/→ = roll
+      if(Input.isDown('ArrowUp'))cmd.pitch-=0.30;
+      if(Input.isDown('ArrowDown'))cmd.pitch+=0.30;
+      if(Input.isDown('ArrowLeft'))cmd.roll+=0.30;
+      if(Input.isDown('ArrowRight'))cmd.roll-=0.30;
+    }else if(controlScheme==='shooter'){
+      // ★ SHOOTER (WASD-стиль) ★
+      // W/S = pitch, A/D = roll, Q/E = yaw, Space/Shift = газ
+      if(Input.isDown('KeyW'))cmd.pitch-=0.30;
+      if(Input.isDown('KeyS'))cmd.pitch+=0.30;
+      if(Input.isDown('KeyA'))cmd.roll+=0.30;
+      if(Input.isDown('KeyD'))cmd.roll-=0.30;
+      if(Input.isDown('KeyQ'))cmd.yawRate+=2.0;
+      if(Input.isDown('KeyE'))cmd.yawRate-=2.0;
+      if(Input.isDown('Space'))cmd.throttle+=0.15;
+      if(Input.isDown('ShiftLeft')||Input.isDown('ShiftRight'))cmd.throttle-=0.15;
+    }else{
+      // ★ CUSTOM — все клавиши сразу ★
+      if(Input.isDown('KeyW'))cmd.throttle+=0.15;
+      if(Input.isDown('KeyS'))cmd.throttle-=0.15;
+      if(Input.isDown('KeyA'))cmd.yawRate+=2.0;
+      if(Input.isDown('KeyD'))cmd.yawRate-=2.0;
+      if(Input.isDown('ArrowUp'))cmd.pitch-=0.30;
+      if(Input.isDown('ArrowDown'))cmd.pitch+=0.30;
+      if(Input.isDown('ArrowLeft'))cmd.roll+=0.30;
+      if(Input.isDown('ArrowRight'))cmd.roll-=0.30;
+      if(Input.isDown('KeyQ'))cmd.yawRate+=2.0;
+      if(Input.isDown('KeyE'))cmd.yawRate-=2.0;
+      if(Input.isDown('Space'))cmd.throttle+=0.10;
+      if(Input.isDown('ShiftLeft')||Input.isDown('ShiftRight'))cmd.throttle-=0.10;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // WAVE G — МОБИЛЬНОЕ УПРАВЛЕНИЕ (раскладка Mode 2 из пультов)
+  //   Левый стик:  Y = тангаж (pitch), X = yaw
+  //   Правый стик: Y = газ (throttle), X = крен (roll)
+  // Совпадает с реальным пультом DJI/FrSky/Betaflight.
+  // ═══════════════════════════════════════════════════════════════
+  if(isMobile&&!useGamepad){
+    // Левый стик — тангаж + yaw
+    const lx=applyStickCurve(joyLeft.x);
+    const ly=applyStickCurve(joyLeft.y);
+    cmd.pitch    += ly*0.30;        // стик вверх = нос вверх
+    cmd.yawRate  += -lx*2.0;        // стик вправо = yaw вправо
+    // Правый стик — газ + крен
+    const rx=applyStickCurve(joyRight.x);
+    const ry=applyStickCurve(joyRight.y);
+    cmd.throttle += -ry*1.2;        // стик вверх = газ+
+    cmd.roll     += -rx*0.30;       // стик вправо = крен вправо
+  }
+  // ═══════════════════════════════════════════════════════════════
+  // WAVE G — импульс газа от кнопок ▲▼ (мобилка)
+  // Работает в ANGLE/HORIZON/ACRO: короткий импульс газа.
+  // ═══════════════════════════════════════════════════════════════
+  if(mobileThrottleImpulseTime>0){
+    cmd.throttle += mobileThrottleImpulse*0.35;
+    mobileThrottleImpulseTime -= 1/60; // аппроксимация dt
+  } else {
+    mobileThrottleImpulse=0;
+  }
+
+  // ── Применяем чувствительность ──
+  cmd.throttle = Math.max(-1.5,Math.min(1.5,cmd.throttle*inputSensitivity.throttle));
+  cmd.yawRate  = Math.max(-4.0,Math.min(4.0,cmd.yawRate *inputSensitivity.yaw));
+  cmd.pitch    = Math.max(-0.6,Math.min(0.6,cmd.pitch  *inputSensitivity.pitch));
+  cmd.roll     = Math.max(-0.6,Math.min(0.6,cmd.roll   *inputSensitivity.roll));
+
   return cmd;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WAVE B — сохранение/загрузка схемы и сенсы
+// ═══════════════════════════════════════════════════════════════
+function loadControlSettings(){
+  try{
+    const raw=localStorage.getItem(CONTROL_KEY);
+    if(raw){
+      const p=JSON.parse(raw);
+      if(p.scheme&&CONTROL_SCHEMES[p.scheme])controlScheme=p.scheme;
+      if(typeof p.expo==='number')inputExpo=Math.max(0,Math.min(1,p.expo));
+      if(typeof p.deadzone==='number')inputDeadzone=Math.max(0,Math.min(0.25,p.deadzone));
+      if(p.sens){
+        ['throttle','yaw','pitch','roll'].forEach(k=>{
+          if(typeof p.sens[k]==='number')inputSensitivity[k]=Math.max(0.5,Math.min(2,p.sens[k]));
+        });
+      }
+    }
+  }catch(e){}
+}
+function saveControlSettings(){
+  try{
+    localStorage.setItem(CONTROL_KEY,JSON.stringify({
+      scheme:controlScheme,
+      expo:inputExpo,
+      deadzone:inputDeadzone,
+      sens:inputSensitivity
+    }));
+  }catch(e){}
 }
 
 // ============================================================
@@ -10302,34 +11886,41 @@ function detectMobile(){
   DEV.isLowEnd=isLowEnd;
 
   if(isMobile){
+    // ═══════════════════════════════════════════════════════════
+    // WAVE MOBILE-QUALITY v2 — качественная картинка на телефоне.
+    // Расчёт на mid-range 2022+ (A54, Redmi Note 12, iPhone SE 2+).
+    // Если устройство не тянет — авто-адаптация в animate() снизит.
+    // ═══════════════════════════════════════════════════════════
+    const dpr=window.devicePixelRatio||1;
+
     // ── Renderer ──
-    DEV.pixelRatio=Math.min(window.devicePixelRatio||1,isLowEnd?0.8:1.0);
-    DEV.antialias=false;
-    DEV.shadows=!isLowEnd;         // на low-end тени выключаем совсем
-    DEV.shadowMapSize=512;
-    DEV.rimLight=false;
+    DEV.pixelRatio=Math.min(dpr,isLowEnd?1.25:1.75);
+    DEV.antialias=!isLowEnd;                 // MSAA — даёт чёткие края
+    DEV.shadows=true;                        // тени = объём, не отключаем
+    DEV.shadowMapSize=isLowEnd?1024:2048;
+    DEV.rimLight=!isLowEnd;
 
     // ── Постэффекты ──
-    DEV.godRayCount=0;             // god rays — дорого
-    DEV.heavyEffects=!isLowEnd;    // на low-end отключаем blur-фильтры
+    DEV.godRayCount=isLowEnd?0:4;
+    DEV.heavyEffects=!isLowEnd;
 
     // ── Частицы ──
-    DEV.dustCount=20;
-    DEV.sparkCount=14;
-    DEV.trailPoints=60;
+    DEV.dustCount=isLowEnd?32:48;
+    DEV.sparkCount=isLowEnd?20:34;
+    DEV.trailPoints=isLowEnd?70:90;
 
-    // ── Множители ──
-    DEV.worldScale=isLowEnd?0.30:0.45;
-    DEV.particleScale=isLowEnd?0.25:0.35;
-    DEV.ambientScale=isLowEnd?0.20:0.30;
+    // ── Множители мира ──
+    DEV.worldScale=isLowEnd?0.55:0.85;
+    DEV.particleScale=isLowEnd?0.55:0.85;
+    DEV.ambientScale=isLowEnd?0.45:0.75;
 
     // ── Частоты ──
-    DEV.targetFps=30;
-    DEV.hudEvery=6;
-    DEV.minimapEvery=6;
-    DEV.shadowEvery=6;
-    DEV.compassEvery=8;
-    DEV.physicsPanelEvery=8;
+    DEV.targetFps=60;
+    DEV.hudEvery=3;
+    DEV.minimapEvery=3;
+    DEV.shadowEvery=isLowEnd?4:3;
+    DEV.compassEvery=4;
+    DEV.physicsPanelEvery=4;
     trailMaxPoints=DEV.trailPoints;
     DUST_COUNT=DEV.dustCount;
 
@@ -10337,8 +11928,18 @@ function detectMobile(){
     document.getElementById('mobileControls').style.display='flex';
     document.getElementById('mobileButtons').style.display='flex';
     document.getElementById('controls').style.display='none';
+    inputMode='touch';
     document.body.classList.add('is-mobile');
+    document.body.setAttribute('data-input','touch');
     if(isLowEnd)document.body.classList.add('is-lowend');
+    if(isLowEnd){
+      heatHazeEnabled=false;
+      godRaysEnabled=false;
+    }
+  }
+  if(typeof _refreshFrameInterval==='function')_refreshFrameInterval();
+  if(!isMobile){
+    document.body.setAttribute('data-input','desktop');
   }
 }
 function initJoysticks(){setupJoystick('joyLeft',joyLeft);setupJoystick('joyRight',joyRight);}
@@ -10358,6 +11959,119 @@ function setupJoystick(elId,st){
   el.addEventListener('touchend',e=>{for(let i=0;i<e.changedTouches.length;i++)if(e.changedTouches[i].identifier===st.id)rst();});
   el.addEventListener('touchcancel',rst);
 }
+// ═══════════════════════════════════════════════════════════════
+// WAVE B — обработка стиков: deadzone + expo
+// Возвращает -1..1 с мёртвой зоной в центре и мягкой кривой у нуля.
+// ═══════════════════════════════════════════════════════════════
+function applyStickCurve(raw,deadzone,expo){
+  const dz=deadzone!==undefined?deadzone:inputDeadzone;
+  const ex=expo!==undefined?expo:inputExpo;
+  const mag=Math.abs(raw);
+  if(mag<dz)return 0;
+  // Перемасштабируем [dz..1] → [0..1]
+  const n=(mag-dz)/(1-dz);
+  // expo: y = (1-ex)*x + ex*x^3
+  const curved=(1-ex)*n+ex*n*n*n;
+  return Math.sign(raw)*curved;
+}
+
+// Геймпад — ручной polling раз в кадр
+// ═══════════════════════════════════════════════════════════════
+// WAVE F FIX — защита от «фантомного» геймпада.
+//
+// Проблема: некоторые системы (Steam Input, vJoy, DS4Windows,
+// Xbox Game Bar, беспроводные наушники) определяют себя как
+// геймпад, при этом оси в нейтрали. Из-за этого клавиатура
+// перестаёт работать, а дрон управляется только теми осями,
+// которые реально шумят.
+//
+// Решение: геймпад считается активным только если за последние
+// 3 секунды было движение хотя бы одной оси >0.05. Иначе —
+// игнорируем, клавиатура берёт управление.
+// ═══════════════════════════════════════════════════════════════
+let _gamepadLastMove=0;
+let _gamepadSticksIdle=true;
+
+function pollGamepad(){
+  if(!navigator.getGamepads)return;
+  const pads=navigator.getGamepads();
+  let found=null;
+  for(let i=0;i<pads.length;i++){
+    if(pads[i]&&pads[i].connected){found=pads[i];break;}
+  }
+  if(!found){
+    if(gamepadState.connected){
+      gamepadState.connected=false;
+      gamepadIndex=-1;
+      showToast('🎮 Геймпад отключён');
+    }
+    _gamepadSticksIdle=true;
+    return;
+  }
+  if(!gamepadState.connected){
+    gamepadState.connected=true;
+    gamepadIndex=found.index;
+    gamepadState.name=found.id||'Gamepad';
+    _gamepadLastMove=performance.now();
+    _gamepadSticksIdle=true;
+    if(!gamepadSeenOnce){
+      gamepadSeenOnce=true;
+      showToast('🎮 '+gamepadState.name);
+    }
+  }
+  const a=found.axes||[];
+  const ax0=a[0]||0, ax1=a[1]||0, ax2=a[2]||0, ax3=a[3]||0;
+
+  // Детект движения (порог 0.06 — реальный ход стика, а не шум)
+  const moved=Math.abs(ax0-gamepadState.axes[0])>0.06||
+              Math.abs(ax1-gamepadState.axes[1])>0.06||
+              Math.abs(ax2-gamepadState.axes[2])>0.06||
+              Math.abs(ax3-gamepadState.axes[3])>0.06;
+  if(moved)_gamepadLastMove=performance.now();
+
+  gamepadState.axes[0]=ax0;
+  gamepadState.axes[1]=ax1;
+  gamepadState.axes[2]=ax2;
+  gamepadState.axes[3]=ax3;
+
+  // Экспонента + deadzone (для UI индикатора и как fallback)
+  gamepadStickL.x=applyStickCurve(ax0);
+  gamepadStickL.y=applyStickCurve(ax1);
+  gamepadStickR.x=applyStickCurve(ax2);
+  gamepadStickR.y=applyStickCurve(ax3);
+
+  // Мёртвый геймпад = не двигали 3 сек + все стики в нейтрали
+  const idle=performance.now()-_gamepadLastMove>3000;
+  const centered=Math.abs(ax0)<0.1&&Math.abs(ax1)<0.1&&
+                 Math.abs(ax2)<0.1&&Math.abs(ax3)<0.1;
+  _gamepadSticksIdle=idle&&centered;
+  gamepadState.sticksIdle=_gamepadSticksIdle;
+
+  // Кнопки
+  const btns=found.buttons||[];
+  const pressed={};
+  for(let i=0;i<btns.length;i++)pressed[i]=btns[i].pressed;
+  if(pressed[0]&&!gamepadState.buttons[0])onGamepadButton(0);
+  if(pressed[1]&&!gamepadState.buttons[1])onGamepadButton(1);
+  if(pressed[2]&&!gamepadState.buttons[2])onGamepadButton(2);
+  if(pressed[3]&&!gamepadState.buttons[3])onGamepadButton(3);
+  if(pressed[8]&&!gamepadState.buttons[8])onGamepadButton(8);
+  if(pressed[9]&&!gamepadState.buttons[9])onGamepadButton(9);
+  gamepadState.buttons=pressed;
+}
+
+function onGamepadButton(i){
+  if(!gameRunning)return;
+  switch(i){
+    case 0: hoverMode=!hoverMode; if(hoverMode){hoverTargetY=Math.max(0.5,physics.pos.y);showToast('🚁 Hover '+hoverTargetY.toFixed(1)+' м');} else showToast('🚁 Hover off'); break;
+    case 1: cycleCamera(); break;
+    case 2: toggleRTH(); break;
+    case 3: resetDrone(); break;
+    case 8: backToMenu(); break;
+    case 9: togglePanelManager(); break;
+  }
+}
+
 function toggleForces(){showForces=!showForces;}
 function cycleCamera(){cameraMode=(cameraMode+1)%4;showToast('📷 '+['Орбита','FPV','Сверху','Следящая'][cameraMode]);}
 function resetDrone(){
@@ -10365,6 +12079,90 @@ function resetDrone(){
   physics.reset({x:0,y:0.5,z:0});controller.reset();
   if(autopilotCtrl)autopilotCtrl.reset();
   crashState=0;resetTrail();
+}   // ← ЗАКРЫВАЮЩАЯ СКОБКА resetDrone ВОССТАНОВЛЕНА
+
+// ═══════════════════════════════════════════════════════════════
+// WAVE G — мобильные обработчики
+// ═══════════════════════════════════════════════════════════════
+
+// Hover: переключает удержание текущей высоты
+function toggleHoverMobile(){
+  hoverMode=!hoverMode;
+  if(hoverMode){
+    hoverTargetY=Math.max(0.5,physics.pos.y);
+    autopilotMode=false;autopilotLanding=false;
+    rthActive=false;rthPhase='none';
+    document.getElementById('autopilotInd').style.display='none';
+    showToast('🚁 Hover '+hoverTargetY.toFixed(1)+' м');
+  } else {
+    showToast('🚁 Hover off');
+  }
+  const btn=document.getElementById('mbHover');
+  if(btn)btn.classList.toggle('active',hoverMode);
+}
+
+// Газ вверх/вниз: добавка к удержанию или к текущей высоте
+// Каждое нажатие — ±3 м к целевой высоте
+function mobileThrottle(dir){
+  if(hoverMode){
+    // Меняем целевую высоту hover
+    hoverTargetY=Math.max(0.5,Math.min(200,hoverTargetY+dir*3));
+    showToast('🚁 '+hoverTargetY.toFixed(0)+' м');
+  } else if(autopilotMode){
+    autopilotTarget.y=Math.max(1,Math.min(200,autopilotTarget.y+dir*3));
+    showToast('🤖 '+autopilotTarget.y.toFixed(0)+' м');
+  } else if(flightMode==='alt'||flightMode==='gps'){
+    if(!physics._altHoldTarget)physics._altHoldTarget=physics.pos.y;
+    physics._altHoldTarget=Math.max(0.5,Math.min(200,physics._altHoldTarget+dir*3));
+    showToast('✈ '+physics._altHoldTarget.toFixed(0)+' м');
+  } else {
+    // В ANGLE/HORIZON/ACRO — просто импульс газа
+    mobileThrottleImpulse = dir;
+    mobileThrottleImpulseTime = 0.35; // длительность импульса в сек
+  }
+}
+let mobileThrottleImpulse=0;
+let mobileThrottleImpulseTime=0;
+
+// Камера: цикл по 8 режимам
+function cycleCameraMobile(){
+  if(typeof nextCamera==='function')nextCamera();
+  else cameraMode=(cameraMode+1)%8;
+}
+
+// Режим полёта: ANGLE → HORIZON → ACRO → ALT → GPS → ANGLE
+function cycleFlightModeMobile(){
+  const modes=['angle','horizon','acro','alt','gps'];
+  const i=modes.indexOf(flightMode);
+  flightMode=modes[(i+1)%modes.length];
+  if(flightMode==='alt'||flightMode==='gps')physics._altHoldTarget=physics.pos.y;
+  updateFlightModeUI();
+  showToast('✈ '+FLIGHT_MODE_LABEL[flightMode]);
+  const btn=document.getElementById('mbMode');
+  if(btn)btn.textContent=FLIGHT_MODE_LABEL[flightMode].charAt(0);
+}
+
+// Экспортируем для onclick в HTML
+window.toggleHoverMobile=toggleHoverMobile;
+window.mobileThrottle=mobileThrottle;
+window.cycleCameraMobile=cycleCameraMobile;
+window.cycleFlightModeMobile=cycleFlightModeMobile;
+
+// ═══════════════════════════════════════════════════════════════
+// ВОССТАНОВЛЕННЫЙ resetDrone — заголовок функции был потерян
+// при применении предыдущего патча. Возвращаем на место.
+// ═══════════════════════════════════════════════════════════════
+function resetDrone(){
+  if(currentScene==='physicsQuiz'||currentScene==='track'||currentScene==='arena'){
+    physics.reset({x:0,y:8,z:physics.pos.z});
+    controller.reset();
+    return;
+  }
+  physics.reset({x:0,y:0.5,z:0});
+  controller.reset();
+  if(autopilotCtrl)autopilotCtrl.reset();
+  crashState=0;
+  resetTrail();
 }
 
 // ============================================================
@@ -10374,9 +12172,27 @@ let _lastFrameTime=0;
 // _frameInterval вычисляется динамически после detectMobile()
 let _frameInterval=1000/40-1;
 function _refreshFrameInterval(){_frameInterval=1000/DEV.targetFps-1;}
+// ═══════════════════════════════════════════════════════════
+// WAVE A — единый пул временных объектов.
+// Цель: НИ ОДНОГО new THREE.X() в горячем цикле (60–200 Гц).
+// Все аллокации — здесь, один раз. В коде используем .set/.copy.
+// ═══════════════════════════════════════════════════════════
 const _camOff=new THREE.Vector3();
 const _camTarget=new THREE.Vector3();
 const _dTmp=new THREE.Vector3();
+// Дополнительные временные вектора (используются ниже)
+const _v1=new THREE.Vector3();
+const _v2=new THREE.Vector3();
+const _v3=new THREE.Vector3();
+const _v4=new THREE.Vector3();
+const _q1=new THREE.Quaternion();
+const _q2=new THREE.Quaternion();
+const _e1=new THREE.Euler();
+const _e2=new THREE.Euler();
+const _m1=new THREE.Matrix4();
+// Переиспользуемый объект для replay-позиции (не путать с временным _camTarget)
+const _cinemaPos=new THREE.Vector3();
+const _velLocal=new THREE.Vector3();   // для physics.step
 function animate(now){
   requestAnimationFrame(animate);
   if(!gameRunning)return; // не рендерим в меню — GPU свободен
@@ -10386,11 +12202,13 @@ function animate(now){
   const dt=Math.min(clock.getDelta(),0.05);
   accumulator+=dt;frameCounter++;
   renderer.shadowMap.autoUpdate=false;
-  if(frameCounter%3===0)renderer.shadowMap.needsUpdate=true;
-  if(showPerf){
-    fpsFrames++;fpsTime+=dt;
-    if(fpsTime>=0.5){
-      fpsValue=Math.round(fpsFrames/fpsTime);fpsFrames=0;fpsTime=0;
+  if(frameCounter%DEV.shadowEvery===0)renderer.shadowMap.needsUpdate=true;
+  // ═══ WAVE MOBILE-QUALITY: fpsValue считается ВСЕГДА, ═══
+  // даже когда оверлей FPS скрыт — нужно для авто-адаптации.
+  fpsFrames++;fpsTime+=dt;
+  if(fpsTime>=0.5){
+    fpsValue=Math.round(fpsFrames/fpsTime);fpsFrames=0;fpsTime=0;
+    if(showPerf){
       const info=renderer.info;
       document.getElementById('perfIndicator').textContent='FPS: '+fpsValue+' | Треуг.: '+info.render.triangles.toLocaleString()+' | Draw: '+info.render.calls;
     }
@@ -10405,6 +12223,10 @@ function animate(now){
       tr.value=Math.round(dayTime*100);
     }
   }
+
+  // ★ WAVE B: опрос геймпада (до readInput)
+  pollGamepad();
+  if(frameCounter%30===0)updateGamepadStatusUI();
 
   // ★ WAVE 1: системы
   updateSensors(dt);
@@ -10425,15 +12247,15 @@ function animate(now){
     physics.forceNet.add(cgForce);
   }
   // Обновляем панель
-  if(frameCounter%6===0){updateAdvancedPhysicsPanel();updateSensorUI();}
+  if(frameCounter%(DEV.physicsPanelEvery*2)===0){updateAdvancedPhysicsPanel();updateSensorUI();}
   // (satMeshes больше не пересобираются — спавн один раз в startScene)
   updateUrbanGusts();
   updateRTH(dt);
   updateGeofence();
   updateFlightTimer(dt);
   renderStickIndicator();
-  if(frameCounter%4===0){renderCompass();renderAttitude();renderHomeArrow();}
-  if(frameCounter%2===0)logBlackbox();
+  if(frameCounter%DEV.compassEvery===0){renderCompass();renderAttitude();renderHomeArrow();}
+  if(frameCounter%4===0)logBlackbox();
   if(!flightTimerRunning&&physics.pos.y>0.3)flightTimerRunning=true;
   // WAVE 8: голос взлёт/посадка (edge-detect)
   if(!window._wasAirborne&&physics.pos.y>2.0){window._wasAirborne=true;sayAirborne();}
@@ -10446,13 +12268,13 @@ function animate(now){
   // ★ WAVE 2: окружение
   updateWeatherParticles(dt);
   updateLightning(dt);
-  updateBirds(dt);
-  updateOtherDrones(dt);
-  updateGroundTraffic(dt);
-  updateCampfires(dt);
-  if(frameCounter%3===0)updateGodRays();
+  if(!DEV.isLowEnd||frameCounter%2===0)updateBirds(dt);
+  if(!DEV.isLowEnd||frameCounter%2===0)updateOtherDrones(dt);
+  if(!DEV.isLowEnd||frameCounter%2===0)updateGroundTraffic(dt);
+  if(!DEV.isLowEnd||frameCounter%2===0)updateCampfires(dt);
+  if(frameCounter%DEV.shadowEvery===0)updateGodRays();
   updateGroundFog();
-  if(heatHazeEnabled)updateHeatHaze();
+  if(heatHazeEnabled&&DEV.heavyEffects)updateHeatHaze();
   if(frameCounter%4===0)updateAmbientAudio(dt);
   if((currentWeather==='rain'||currentWeather==='storm')&&puddles.length===0&&frameCounter%60===0)spawnPuddles();
 
@@ -10726,9 +12548,31 @@ function animate(now){
   propellers.forEach((p,i)=>{const rpmFactor=physics.motorRPMs[i]/Math.max(1,params.maxRPM);p.rotation.y+=pS*(i%2===0?1:-1)*(0.3+rpmFactor);});
   updateForceArrows();updateMotorIndicators();updateGroundEffect();
   updateTrail(dt);updateDust(dt);updateSparks(dt);updateGhostPlayback();updateSound();
-  if(frameCounter%3===0){updateMinimap();updatePhysicsPanel();}
+  if(frameCounter%DEV.minimapEvery===0){updateMinimap();updatePhysicsPanel();}
   if(isRecording&&frameCounter%2===0)recordFrame();
   if(frameCounter%180===0)checkAchievements();
+  // ═══════════════════════════════════════════════════════════
+  // WAVE MOBILE-QUALITY: авто-адаптация в обе стороны
+  // Раз в ~5 сек (300 кадров при 60fps) проверяем fpsValue.
+  //   • <22       → режем множители (спасаем от лагов)
+  //   • > target-4 → отыгрываем назад (используем запас)
+  // Работает без showPerf — использует внутренний fpsValue.
+  // ═══════════════════════════════════════════════════════════
+  if(DEV.isMobile&&frameCounter%300===0&&fpsValue>0){
+    if(fpsValue<22){
+      if(DEV.particleScale>0.20){
+        DEV.particleScale=Math.max(0.20,DEV.particleScale-0.10);
+        DEV.worldScale=Math.max(0.30,DEV.worldScale-0.10);
+        DEV.ambientScale=Math.max(0.25,DEV.ambientScale-0.10);
+        showToast('⚡ Оптимизация: FPS '+fpsValue);
+      }
+    }else if(fpsValue>DEV.targetFps-4&&DEV.worldScale<1.0){
+      // Есть запас — по чуть-чуть возвращаем качество
+      if(DEV.particleScale<1.0)DEV.particleScale=Math.min(1.0,DEV.particleScale+0.05);
+      if(DEV.worldScale<1.0)DEV.worldScale=Math.min(1.0,DEV.worldScale+0.05);
+      if(DEV.ambientScale<1.0)DEV.ambientScale=Math.min(1.0,DEV.ambientScale+0.05);
+    }
+  }
 
   // ═══ WAVE 3: Камеры (8 режимов) ═══
   _dTmp.set(physics.pos.x,physics.pos.y+0.5,physics.pos.z);
@@ -10779,10 +12623,12 @@ function animate(now){
     // CINEMA — плавная орбита вокруг дрона
     _cinemaTime+=dt*0.25;
     const r=8/zoomLevel;
-    const cx=physics.pos.x+Math.cos(_cinemaTime)*r;
-    const cz=physics.pos.z+Math.sin(_cinemaTime)*r;
-    const cy=physics.pos.y+2.5;
-    camera.position.lerp(new THREE.Vector3(cx,cy,cz),0.05);
+    _cinemaPos.set(
+      physics.pos.x+Math.cos(_cinemaTime)*r,
+      physics.pos.y+2.5,
+      physics.pos.z+Math.sin(_cinemaTime)*r
+    );
+    camera.position.lerp(_cinemaPos,0.05);
     camera.lookAt(_dTmp);
     document.getElementById('crosshair').style.display='none';
   }else{
@@ -10795,6 +12641,22 @@ function animate(now){
   if(shakeIntensity>0.001&&cameraMode!==0&&cameraMode!==7){
     camera.position.x+=_shakeX*0.01;
     camera.position.y+=_shakeY*0.01;
+  }
+
+  // ═══ WAVE MOBILE-QUALITY: look-offset от пальца ═══
+  // В не-ORBIT режимах добавляем вращение поверх базовой ориентации камеры.
+  if((cameraMode!==0&&cameraMode!==7)&&(Math.abs(lookOffsetYaw)>0.001||Math.abs(lookOffsetPitch)>0.001)){
+    _e2.set(lookOffsetPitch,lookOffsetYaw,0,'YXZ');
+    _q2.setFromEuler(_e2);
+    camera.quaternion.multiply(_q2);
+  }
+  // Плавный возврат (halflife ≈ 2 сек) — чтобы взгляд не «залип» вбок
+  if(cameraMode!==0&&cameraMode!==7&&!photoMode){
+    const k=Math.pow(0.7,dt);
+    lookOffsetYaw*=k;
+    lookOffsetPitch*=k;
+    if(Math.abs(lookOffsetYaw)<0.001)lookOffsetYaw=0;
+    if(Math.abs(lookOffsetPitch)<0.001)lookOffsetPitch=0;
   }
 
   // Zoom через FOV
@@ -10841,14 +12703,14 @@ function animate(now){
   }
 
 
-  if(frameCounter%3===0){updateHUD();updateMiniHud();updateMediaBadge();}
+  if(frameCounter%DEV.hudEvery===0){updateHUD();updateMiniHud();updateMediaBadge();}
   updateRecorderTimer(dt); // WAVE 7
-  updateVoiceMonitors();   // WAVE 8
+  if(frameCounter%3===0)updateVoiceMonitors();
   if(frameCounter%6===0)updateMusicDucking(); // WAVE 8
   if(frameCounter%3===0)_modulateAmbient();   // WAVE 8
-  updateProximityAmbient();                    // WAVE 8
+  if(frameCounter%4===0)updateProximityAmbient();
   // WAVE 6: цель урока
-  if(frameCounter%2===0)updateLessonTarget();
+  if(frameCounter%3===0)updateLessonTarget();
 
   // Уроки
   if(currentScene==='tutorial'&&!missionDone){
@@ -10997,6 +12859,18 @@ function updateMiniHud(){
   if(dayTime<0.2||dayTime>0.8)tIco='🌙';
   else if(dayTime<0.3||dayTime>0.7)tIco='🌅';
   document.getElementById('mh-time').textContent=tIco;
+  // WAVE F: индикатор источника ввода
+  const inEl=document.getElementById('mh-input');
+  if(inEl){
+    let src='⌨';       // keyboard
+    let color='#88c8e0';
+    if(isMobile){src='📱';color='#88c8e0';}
+    else if(gamepadState.connected&&!gamepadState.sticksIdle){src='🎮';color='#00ffcc';}
+    else if(gamepadState.connected&&gamepadState.sticksIdle){src='🎮';color='#ff8844';}
+    inEl.textContent=src;
+    inEl.style.color=color;
+    inEl.title='Ввод: '+(isMobile?'touch':(gamepadState.connected?(gamepadState.sticksIdle?'gamepad (мёртвый)':'gamepad'):'keyboard'));
+  }
 }
 
 // ═══ Горячие клавиши F1-F12 + ESC ═══
@@ -11088,54 +12962,452 @@ function applyDefaultPanels(){
   applyPanelVisibility();
 }
 // ============================================================
-// СТАРТ
+// СТАРТ — ПЕРЕНЕСЁН В САМЫЙ КОНЕЦ ФАЙЛА
+// ═══════════════════════════════════════════════════════════
+// ⚠ КРИТИЧНО: bootstrap должен выполняться ПОСЛЕ всех let/const,
+// иначе TDZ-ошибка (Cannot access 'X' before initialization).
+// Именно это вешало загрузку навсегда в v28:
+//   loadHudSettings() вызывался ДО объявления HUD_ITEMS / hudState /
+//   HUD_SETTINGS_KEY / HUD_BUTTONS / HUD_DRAGGABLE (они были ниже).
+// См. блок "СТАРТ (BOOTSTRAP)" в конце скрипта.
 // ============================================================
-Input.init();
-detectMobile();
-initJoysticks();
-initPanelHotkeys();
-loadAudioSettings();      // WAVE 8
-loadVoiceSettings();      // WAVE 8
-loadMusicSettings();      // WAVE 8
-loadMixerSettings();      // WAVE 8
-initVoice();              // WAVE 8
-initUiSfx();               // WAVE 8
-loadAllProgress();
-_updateVoiceBtn();
-_updateMusicBtn();
-_armMusicAutoStart();     // WAVE 8: старт музыки при первом жесте
-buildModelSelector();
-document.getElementById('quizOptA').onclick=()=>answerQuestion('a');
-document.getElementById('quizOptB').onclick=()=>answerQuestion('b');
-window.addEventListener('load',()=>{
-  initThree();
-  initPhotoControls();   // WAVE 7: только здесь renderer уже существует
-  requestAnimationFrame(animate);
-});
-window.addEventListener('error',e=>{
+
+// ═══ WAVE 9: Настройки HUD ═══
+const HUD_SETTINGS_KEY='aether_hud_v27';
+function _hudKey(){return HUD_SETTINGS_KEY+'_'+(isMobile?'mobile':'desktop');}
+const HUD_ITEMS=['topright','miniHud','compass','attitude','flightMode','flightTimer',
+  'envPanel','timeSlider','minimap','homeArrow','stickIndicator','mobileButtons',
+  'camPanel','crosshair','warnings','damageIndicator'];
+// Иконки в topright — переключаются отдельно
+const HUD_BUTTONS=[
+  {id:'camPanelBtn',label:'📷 Камера'},
+  {id:'soundBtn',label:'🔊 Звук'},
+  {id:'voiceBtn',label:'🗣 Голос'},
+  {id:'musicBtn',label:'🎵 Музыка'},
+  {id:'mixerBtn',label:'🎛 Микшер'},
+  {id:'perfBtn',label:'📊 FPS'},
+  {id:'recPanelBtn',label:'⏺ Рекордер'},
+  {id:'replayPanelBtn',label:'🎬 Реплей'},
+  {id:'photoPanelBtn',label:'📸 Фото'}
+];
+// Панель настроек и её кнопка-открывашка — никогда не скрываются
+const HUD_BUTTONS_ALWAYS=['hudSettingsBtn'];
+
+let hudState={};        // элементы HUD
+let hudBtnState={};     // кнопки topright
+let hudOpacity=1.0;     // 0.2 — 1.0
+let hudBlankMode=false; // флаг пресета "Всё скрыть"
+let hudPositions={};    // {id:{x:px,y:px}}
+let hudVideoMode=false; // профиль "Видео-запись"
+let hudDragMode=false;  // режим редактирования позиций
+// Список элементов, которые можно тащить
+const HUD_DRAGGABLE=[
+  'topright','miniHud','compass','attitude','flightMode',
+  'minimap','homeArrow','camPanel','stickIndicator','flightTimer'
+];
+
+function loadHudSettings(){
+  let raw=null;
+  try{ raw=localStorage.getItem(_hudKey()); }catch(e){}
+  // Если на мобиле настроек нет — копируем с десктопа (первое открытие)
+  if(!raw&&isMobile){
+    try{
+      const desk=localStorage.getItem(HUD_SETTINGS_KEY+'_desktop');
+      if(desk){
+        localStorage.setItem(_hudKey(),desk);
+        raw=desk;
+      }
+    }catch(e){}
+  }
+  try{
+    if(raw){
+      const p=JSON.parse(raw);
+      if(p.items)hudState=p.items;
+      if(p.btns)hudBtnState=p.btns;
+      if(typeof p.opacity==='number')hudOpacity=Math.max(0.2,Math.min(1,p.opacity));
+      if(typeof p.blank==='boolean')hudBlankMode=p.blank;
+      if(p.pos)hudPositions=p.pos;
+      if(p.video)hudVideoMode=!!p.video;
+    }
+  }catch(e){}
+  HUD_ITEMS.forEach(k=>{if(typeof hudState[k]!=='boolean')hudState[k]=true;});
+  HUD_BUTTONS.forEach(b=>{if(typeof hudBtnState[b.id]!=='boolean')hudBtnState[b.id]=true;});
+  applyHudSettings();
+  applyHudOpacity();
+  applyHudPositions();
+  applyHudVideoMode();
+}
+function saveHudSettings(){
+  try{
+    localStorage.setItem(_hudKey(),JSON.stringify({
+      items:hudState,btns:hudBtnState,opacity:hudOpacity,blank:hudBlankMode,
+      pos:hudPositions,video:hudVideoMode
+    }));
+  }catch(e){}
+}
+function applyHudSettings(){
+  HUD_ITEMS.forEach(k=>{
+    document.body.classList.toggle('hud-hide-'+k,!hudState[k]);
+  });
+  HUD_BUTTONS.forEach(b=>{
+    const el=document.getElementById(b.id);
+    if(el)el.style.display=hudBtnState[b.id]?'':'none';
+  });
+  // Синхронизация чекбоксов
+  document.querySelectorAll('#hudSettings input[data-hud]').forEach(cb=>{
+    cb.checked=!!hudState[cb.dataset.hud];
+  });
+  document.querySelectorAll('#hudSettings input[data-hudbtn]').forEach(cb=>{
+    cb.checked=!!hudBtnState[cb.dataset.hudbtn];
+  });
+  const sl=document.getElementById('hudOpacitySlider');
+  if(sl&&document.activeElement!==sl)sl.value=Math.round(hudOpacity*100);
+  const vl=document.getElementById('hudOpacityVal');
+  if(vl)vl.textContent=Math.round(hudOpacity*100)+'%';
+}
+function applyHudOpacity(){
+  document.body.style.setProperty('--hud-opacity',hudOpacity);
+}
+
+// ═══ WAVE 9.5: Drag-n-drop HUD ═══
+function applyHudPositions(){
+  HUD_DRAGGABLE.forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    const p=hudPositions[id];
+    if(p&&typeof p.x==='number'&&typeof p.y==='number'){
+      el.style.position='fixed';
+      el.style.left=p.x+'px';
+      el.style.top=p.y+'px';
+      el.style.right='auto';
+      el.style.bottom='auto';
+      el.style.transform='none';
+      el.style.margin='0';
+    }else{
+      // сбрасываем к дефолту
+      el.style.position='';
+      el.style.left='';
+      el.style.top='';
+      el.style.right='';
+      el.style.bottom='';
+      el.style.transform='';
+      el.style.margin='';
+    }
+  });
+}
+function saveHudPosition(id,x,y){
+  hudPositions[id]={x:Math.round(x),y:Math.round(y)};
+  saveHudSettings();
+}
+function resetHudPositions(){
+  hudPositions={};
+  applyHudPositions();
+  saveHudSettings();
+  showToast('↺ Позиции сброшены');
+}
+function toggleHudDragMode(){
+  hudDragMode=!hudDragMode;
+  document.body.classList.toggle('hud-drag-mode',hudDragMode);
+  const btn=document.getElementById('hudDragBtn');
+  if(btn){
+    btn.textContent=hudDragMode?'🔒 Заблокировать':'🔓 Разблокировать';
+    btn.classList.toggle('active',hudDragMode);
+  }
+  showToast(hudDragMode?'🔓 Перетаскивание включено':'🔒 Позиции зафиксированы');
+  if(!hudDragMode)applyHudPositions();
+}
+function initHudDrag(){
+  HUD_DRAGGABLE.forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.addEventListener('pointerdown',e=>{
+      if(!hudDragMode)return;
+      // Игнорируем клики по интерактивным элементам (кнопкам)
+      if(e.target.closest('button')||e.target.closest('input'))return;
+      e.preventDefault();
+      const r=el.getBoundingClientRect();
+      // Переводим в fixed + абсолютные координаты
+      el.style.position='fixed';
+      el.style.left=r.left+'px';
+      el.style.top=r.top+'px';
+      el.style.right='auto';
+      el.style.bottom='auto';
+      el.style.transform='none';
+      el.style.margin='0';
+      el.style.zIndex='200';
+      const startX=e.clientX,startY=e.clientY;
+      const startL=r.left,startT=r.top;
+      try{el.setPointerCapture(e.pointerId);}catch(err){}
+      const onMove=(ev)=>{
+        const nx=startL+(ev.clientX-startX);
+        const ny=startT+(ev.clientY-startY);
+        // Ограничиваем экраном
+        const W=window.innerWidth,H=window.innerHeight;
+        const w=el.offsetWidth,h=el.offsetHeight;
+        el.style.left=Math.max(2,Math.min(W-w-2,nx))+'px';
+        el.style.top=Math.max(2,Math.min(H-h-2,ny))+'px';
+      };
+      const onUp=()=>{
+        el.removeEventListener('pointermove',onMove);
+        el.removeEventListener('pointerup',onUp);
+        el.removeEventListener('pointercancel',onUp);
+        saveHudPosition(id,parseFloat(el.style.left),parseFloat(el.style.top));
+      };
+      el.addEventListener('pointermove',onMove);
+      el.addEventListener('pointerup',onUp);
+      el.addEventListener('pointercancel',onUp);
+    },{passive:false});
+  });
+}
+
+// ═══ WAVE 9.6: Видео-профиль ═══
+function applyHudVideoMode(){
+  document.body.classList.toggle('hud-video-mode',hudVideoMode);
+}
+function setHudVideoMode(on){
+  hudVideoMode=!!on;
+  applyHudVideoMode();
+  saveHudSettings();
+}
+function setHudOpacity(v){
+  hudOpacity=Math.max(0.2,Math.min(1,parseFloat(v)/100));
+  applyHudOpacity();
+  const vl=document.getElementById('hudOpacityVal');
+  if(vl)vl.textContent=Math.round(hudOpacity*100)+'%';
+  saveHudSettings();
+}
+function toggleHudSettings(){
+  const p=document.getElementById('hudSettings');
+  if(!p)return;
+  const open=p.style.display==='block';
+  p.style.display=open?'none':'block';
+  if(!open){
+    buildHudBtnList();
+    applyHudSettings();
+    const btn=document.getElementById('hudDragBtn');
+    if(btn){
+      btn.textContent=hudDragMode?'🔒 Заблокировать':'🔓 Разблокировать';
+      btn.classList.toggle('active',hudDragMode);
+    }
+  }
+}
+function buildHudBtnList(){
+  const el=document.getElementById('hudBtnList');
+  if(!el)return;
+  el.innerHTML='';
+  HUD_BUTTONS.forEach(b=>{
+    const lbl=document.createElement('label');
+    lbl.className='hs-btn-item';
+    lbl.innerHTML='<input type="checkbox" data-hudbtn="'+b.id+'"'+(hudBtnState[b.id]?' checked':'')+'><span>'+b.label+'</span>';
+    el.appendChild(lbl);
+  });
+}
+function hudPreset(name){
+  if(name==='default'){
+    HUD_ITEMS.forEach(k=>{hudState[k]=true;});
+    HUD_BUTTONS.forEach(b=>{hudBtnState[b.id]=true;});
+    hudOpacity=1.0;
+    hudBlankMode=false;
+    hudVideoMode=false;
+  }else if(name==='all'){
+    HUD_ITEMS.forEach(k=>{hudState[k]=true;});
+    HUD_BUTTONS.forEach(b=>{hudBtnState[b.id]=true;});
+    hudBlankMode=false;
+    hudVideoMode=false;
+  }else if(name==='clean'){
+    HUD_ITEMS.forEach(k=>{hudState[k]=false;});
+    HUD_BUTTONS.forEach(b=>{hudBtnState[b.id]=false;});
+    hudState.miniHud=true;
+    hudState.warnings=true;
+    hudState.crosshair=true;
+    hudState.flightMode=true;
+    hudState.topright=true;
+    hudBtnState.hudSettingsBtn=true;
+    hudOpacity=1.0;
+    hudBlankMode=false;
+    hudVideoMode=false;
+  }else if(name==='blank'){
+    HUD_ITEMS.forEach(k=>{hudState[k]=false;});
+    HUD_BUTTONS.forEach(b=>{hudBtnState[b.id]=false;});
+    hudState.topright=true;
+    hudBtnState.hudSettingsBtn=true;
+    hudBlankMode=true;
+    hudVideoMode=false;
+  }else if(name==='cinema'){
+    // 🎥 Видео-профиль: чистый кадр для записи
+    HUD_ITEMS.forEach(k=>{hudState[k]=false;});
+    HUD_BUTTONS.forEach(b=>{hudBtnState[b.id]=false;});
+    hudState.flightMode=true;    // режим полёта в углу
+    hudState.miniHud=true;       // компактный miniHud снизу
+    hudState.topright=true;      // ⚙ всегда доступен
+    hudBtnState.hudSettingsBtn=true;
+    hudOpacity=1.0;
+    hudBlankMode=false;
+    hudVideoMode=true;           // включает cinema bars
+  }
+  applyHudSettings();
+  applyHudOpacity();
+  applyHudVideoMode();
+  saveHudSettings();
+  showToast('⚙ Пресет: '+name);
+}
+// ═══════════════════════════════════════════════════════════════
+// WAVE B — UI управления
+// ═══════════════════════════════════════════════════════════════
+function buildSchemePicker(){
+  const el=document.getElementById('schemePicker');
+  if(!el)return;
+  el.innerHTML='';
+  Object.keys(CONTROL_SCHEMES).forEach(key=>{
+    const s=CONTROL_SCHEMES[key];
+    const b=document.createElement('button');
+    b.className='scheme-btn'+(key===controlScheme?' active':'');
+    b.innerHTML='<span class="sb-name">'+s.name+'</span><span class="sb-sub">'+s.sub+'</span>';
+    b.onclick=()=>{
+      controlScheme=key;
+      saveControlSettings();
+      buildSchemePicker();
+      showToast('🎮 '+s.name+' — '+s.desc);
+    };
+    el.appendChild(b);
+  });
+}
+function syncSensSliders(){
+  const map={throttle:'sensThrottle',yaw:'sensYaw',pitch:'sensPitch',roll:'sensRoll'};
+  Object.keys(map).forEach(k=>{
+    const sl=document.getElementById(map[k]);
+    const vl=document.getElementById(map[k]+'V');
+    const v=inputSensitivity[k];
+    if(sl&&document.activeElement!==sl)sl.value=Math.round(v*100);
+    if(vl)vl.textContent=v.toFixed(2);
+  });
+  const ex=document.getElementById('sensExpo');
+  const exV=document.getElementById('sensExpoV');
+  if(ex&&document.activeElement!==ex)ex.value=Math.round(inputExpo*100);
+  if(exV)exV.textContent=inputExpo.toFixed(2);
+  const dz=document.getElementById('sensDZ');
+  const dzV=document.getElementById('sensDZV');
+  if(dz&&document.activeElement!==dz)dz.value=Math.round(inputDeadzone*100);
+  if(dzV)dzV.textContent=inputDeadzone.toFixed(2);
+}
+function onSensChange(axis,v){
+  inputSensitivity[axis]=Math.max(0.5,Math.min(2,parseFloat(v)/100));
+  const vl=document.getElementById('sens'+axis.charAt(0).toUpperCase()+axis.slice(1)+'V');
+  if(vl)vl.textContent=inputSensitivity[axis].toFixed(2);
+  saveControlSettings();
+}
+function onExpoChange(v){
+  inputExpo=Math.max(0,Math.min(1,parseFloat(v)/100));
+  const el=document.getElementById('sensExpoV');
+  if(el)el.textContent=inputExpo.toFixed(2);
+  saveControlSettings();
+}
+function onDzChange(v){
+  inputDeadzone=Math.max(0,Math.min(0.25,parseFloat(v)/100));
+  const el=document.getElementById('sensDZV');
+  if(el)el.textContent=inputDeadzone.toFixed(2);
+  saveControlSettings();
+}
+// ═══════════════════════════════════════════════════════════════
+// WAVE D FIX: VRS toggle
+// ═══════════════════════════════════════════════════════════════
+function onVrsToggle(checked){
+  window.vrsDisabled=!checked;
+  try{localStorage.setItem('skyforge_vrs',checked?'1':'0');}catch(e){}
+  showToast(checked?'🌀 VRS включён':'🌀 VRS отключён');
+  if(!checked&&physics)physics.vrsIntensity=0;
+}
+function loadVrsSetting(){
+  try{
+    const v=localStorage.getItem('skyforge_vrs');
+    // WAVE E: если нет настройки — по умолчанию ВЫКЛЮЧЕН
+    if(v==='1')window.vrsDisabled=false;   // пользователь включил вручную
+    else window.vrsDisabled=true;          // по умолчанию off
+  }catch(e){window.vrsDisabled=true;}
+}
+function controlResetAll(){
+  controlScheme='mode2';
+  inputSensitivity={throttle:1,yaw:1,pitch:1,roll:1};
+  inputExpo=0.35;
+  inputDeadzone=0.08;
+  saveControlSettings();
+  buildSchemePicker();
+  syncSensSliders();
+  showToast('↺ Управление по умолчанию');
+}
+function updateGamepadStatusUI(){
+  const el=document.getElementById('gamepadStatus');
+  if(!el)return;
+  if(gamepadState.connected){
+    el.innerHTML='🎮 <b style="color:#00ffcc">'+gamepadState.name.slice(0,40)+'</b>';
+  }else{
+    el.innerHTML='🎮 Геймпад не подключён';
+  }
+}
+
+function initHudSettingsUI(){
+  // Чекбоксы элементов HUD
+  const grid=document.querySelector('#hudSettings .hs-grid');
+  if(grid){
+    grid.addEventListener('change',e=>{
+      const cb=e.target;
+      if(cb&&cb.dataset.hud){
+        hudState[cb.dataset.hud]=!!cb.checked;
+        applyHudSettings();
+        saveHudSettings();
+      }
+    });
+  }
+  // Чекбоксы иконок topright
+  const list=document.getElementById('hudBtnList');
+  if(list){
+    list.addEventListener('change',e=>{
+      const cb=e.target;
+      if(cb&&cb.dataset.hudbtn){
+        hudBtnState[cb.dataset.hudbtn]=!!cb.checked;
+        applyHudSettings();
+        saveHudSettings();
+      }
+    });
+  }
+  // Drag-n-drop
+  initHudDrag();
+  // WAVE B: схема управления
+  buildSchemePicker();
+  syncSensSliders();
+  // WAVE D: VRS toggle — синхронизируем галочку
+  const vrsCb=document.getElementById('vrsToggle');
+  if(vrsCb)vrsCb.checked=!window.vrsDisabled;
+  // Хоткей ` — toggle панели
+  window.addEventListener('keydown',e=>{
+    if(e.code==='Backquote'&&!e.ctrlKey&&!e.altKey&&!e.metaKey){
+      e.preventDefault();
+      toggleHudSettings();
+    }
+  });
+}
+
+// WAVE 9: Полноэкранный режим
+window.toggleFullscreen=function(){
+  const el=document.documentElement;
+  const isFs=document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement||document.msFullscreenElement;
+  if(!isFs){
+    const req=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
+    if(req)req.call(el);
+  }else{
+    const exit=document.exitFullscreen||document.webkitExitFullscreen||document.mozCancelFullScreen||document.msExitFullscreen;
+    if(exit)exit.call(document);
+  }
+};
+
+// WAVE 9: Защита от «залипшей» загрузки — если через 8 сек #loading всё ещё видно
+setTimeout(()=>{
   const el=document.getElementById('loading');
   if(el&&el.style.display!=='none'){
-    el.innerHTML='❌ Ошибка<br><br><span style="font-size:14px;color:#ff6666;">'+
-      (e.message||'Three.js не загружен')+'</span>';
+    el.innerHTML='⚠ 3D-движок не запустился<br><br><span style="font-size:13px;color:#ff8888;max-width:80vw;text-align:center;line-height:1.6">Проверь консоль (F12 → Console).<br>Чаще всего: WebGL отключён, или ошибка в коде.</span>';
   }
-});
-document.addEventListener('dblclick',()=>{
-  const mc=document.getElementById('mobileControls');
-  if(mc)mc.style.display=mc.style.display==='flex'?'none':'flex';
-});
-setInterval(()=>{
-  if(!gameRunning)return;
-  pushTel(telAlt,physics.pos.y);
-  pushTel(telPitch,physics.euler.x);
-  pushTel(telThrottle,controller.smoothedThrottle);
-  pushTel(telForce,[
-    physics.forceThrust.length()/(params.mass*params.gravity),
-    physics.forceDrag.length()/(params.mass*params.gravity),
-    physics.forceNet.length()/(params.mass*params.gravity)
-  ]);
-  pushTel(telBattery,physics.battery.voltage);
-  updateTelemetry();
-},120);
+},8000);
+
 
 // WAVE 1: Экспорт Blackbox
 window.exportBlackbox=function(){
@@ -11161,7 +13433,6 @@ window.addEventListener('keydown',e=>{
     if(!hh)return;
     hh.style.display=(hh.style.display==='flex')?'none':'flex';
     if(hh.style.display==='flex'){
-      // автоскрытие через 12 сек
       clearTimeout(window._hintTimeout);
       hh.style.opacity='1';
       window._hintTimeout=setTimeout(()=>{
@@ -11170,6 +13441,85 @@ window.addEventListener('keydown',e=>{
     }
   }
 });
+
+// ═══════════════════════════════════════════════════════════
+// СТАРТ (BOOTSTRAP) — В САМОМ КОНЦЕ СКРИПТА
+// ═══════════════════════════════════════════════════════════
+// Здесь УЖЕ инициализированы все let/const (HUD_ITEMS, hudState,
+// HUD_SETTINGS_KEY, HUD_BUTTONS, HUD_DRAGGABLE и т.д.) → TDZ-ошибки
+// невозможны. Любое падение обёрнуто в try/catch → показывается в UI.
+// ═══════════════════════════════════════════════════════════
+(function bootstrap(){
+  try{
+    Input.init();
+    detectMobile();
+    if(typeof _refreshFrameInterval==='function')_refreshFrameInterval();
+    initJoysticks();
+    initPanelHotkeys();
+    loadAudioSettings();       // WAVE 8
+    loadVoiceSettings();       // WAVE 8
+    loadMusicSettings();       // WAVE 8
+    loadMixerSettings();       // WAVE 8
+    loadControlSettings();     // WAVE B
+    loadVrsSetting();          // WAVE D
+    initVoice();               // WAVE 8
+    initUiSfx();               // WAVE 8
+    loadAllProgress();
+    loadHudSettings();
+    initHudSettingsUI();
+    _updateVoiceBtn();
+    _updateMusicBtn();
+    _armMusicAutoStart();      // WAVE 8
+    buildModelSelector();
+    const qA=document.getElementById('quizOptA');
+    const qB=document.getElementById('quizOptB');
+    if(qA)qA.onclick=()=>answerQuestion('a');
+    if(qB)qB.onclick=()=>answerQuestion('b');
+    console.log('[AETHER] bootstrap OK · isMobile='+isMobile+' · lowEnd='+isLowEnd+' · targetFps='+DEV.targetFps);
+  }catch(err){
+    if(window._showFatalError)window._showFatalError(err,'bootstrap');
+    else console.error('[AETHER] bootstrap failed:',err);
+    return;
+  }
+
+  // ── Запуск 3D-движка (после window.load или сразу, если уже complete) ──
+  function startEngine(){
+    if(window.__engineStarted)return;
+    window.__engineStarted=true;
+    try{
+      initThree();
+      initPhotoControls();
+      requestAnimationFrame(animate);
+      console.log('[AETHER] engine started');
+    }catch(err){
+      if(window._showFatalError)window._showFatalError(err,'initThree');
+      else console.error('[AETHER] initThree failed:',err);
+    }
+  }
+  if(document.readyState==='complete')startEngine();
+  else window.addEventListener('load',startEngine);
+
+  // ── dblclick — toggle мобильного UI ──
+  document.addEventListener('dblclick',()=>{
+    const mc=document.getElementById('mobileControls');
+    if(mc)mc.style.display=mc.style.display==='flex'?'none':'flex';
+  });
+
+  // ── Телеметрия ──
+  setInterval(()=>{
+    if(!gameRunning||!physics||!controller||!params)return;
+    pushTel(telAlt,physics.pos.y);
+    pushTel(telPitch,physics.euler.x);
+    pushTel(telThrottle,controller.smoothedThrottle);
+    pushTel(telForce,[
+      physics.forceThrust.length()/(params.mass*params.gravity),
+      physics.forceDrag.length()/(params.mass*params.gravity),
+      physics.forceNet.length()/(params.mass*params.gravity)
+    ]);
+    pushTel(telBattery,physics.battery.voltage);
+    updateTelemetry();
+  },120);
+})();
 </script>
 </body>
 </html>
