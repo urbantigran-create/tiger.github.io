@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Drone Racer 3D</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000;
+    font-family: 'Segoe UI', system-ui, sans-serif; }
+  canvas { display: block; }
+
+  #hud {
+    position: fixed; top: 16px; left: 16px; color: #e0f2ff;
+    font-size: 15px; line-height: 1.6;
+    text-shadow: 0 0 8px rgba(0,200,255,0.9), 0 0 2px #000;
+    pointer-events: none; z-index: 10;
+    font-variant-numeric: tabular-nums; font-weight: 600;
+  }
+  #hud .val { color: #7fe4ff; font-weight: 800; }
+
+  #boost-bar {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    width: 300px; height: 14px; background: rgba(0,0,0,0.6);
+    border: 1px solid rgba(120,220,255,0.6); border-radius: 8px;
+    overflow: hidden; z-index: 10;
+  }
+  #boost-fill {
+    height: 100%; width: 100%;
+    background: linear-gradient(90deg, #00d4ff, #a0f0ff);
+    box-shadow: 0 0 16px rgba(0,220,255,0.9);
+  }
+
+  #center-msg {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); text-align: center;
+    color: #fff; pointer-events: none; z-index: 20;
+    text-shadow: 0 0 24px rgba(0,220,255,0.9), 0 0 6px #000;
+  }
+  #center-msg h1 {
+    font-size: 68px; font-weight: 900; letter-spacing: 3px;
+    color: #7fe4ff; margin-bottom: 8px;
+  }
+  #center-msg p { font-size: 22px; color: #e0f2ff; line-height: 1.5; }
+  #center-msg small {
+    display: block; font-size: 15px; margin-top: 26px;
+    color: #a0c8d8; letter-spacing: 1px;
+  }
+
+  #menu {
+    position: fixed; inset: 0; background: rgba(0,10,20,0.88);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 30; color: #fff;
+  }
+  #menu .card {
+    background: linear-gradient(135deg, rgba(10,30,50,0.97), rgba(5,15,30,0.97));
+    border: 1px solid rgba(100,200,255,0.35);
+    border-radius: 20px; padding: 44px 60px; text-align: center;
+    box-shadow: 0 24px 80px rgba(0,150,255,0.3);
+    max-width: 640px;
+  }
+  #menu h1 {
+    font-size: 52px; margin-bottom: 6px;
+    color: #7fe4ff; letter-spacing: 3px;
+    text-shadow: 0 0 40px rgba(0,200,255,0.8);
+    font-weight: 900;
+  }
+  #menu .sub { color: #a0c8d8; margin-bottom: 28px; font-size: 15px; }
+  #menu .controls {
+    text-align: left; display: inline-block; margin: 20px 0;
+    font-size: 15px; line-height: 2.1; color: #c0e0f0;
+  }
+  #menu .controls .key {
+    display: inline-block; min-width: 66px;
+    padding: 2px 10px; background: rgba(0,100,150,0.5);
+    border-radius: 5px; text-align: center;
+    font-family: monospace; font-weight: 800;
+    color: #7fe4ff; margin-right: 14px;
+    border: 1px solid rgba(120,220,255,0.4);
+  }
+  #menu button {
+    background: linear-gradient(90deg, #00a0e0, #00d4ff);
+    border: none; color: #001a2e; padding: 18px 56px;
+    font-size: 20px; font-weight: 900; letter-spacing: 3px;
+    border-radius: 10px; cursor: pointer;
+    text-transform: uppercase; transition: transform 0.15s;
+    box-shadow: 0 10px 40px rgba(0,200,255,0.5);
+    font-family: inherit;
+  }
+  #menu button:hover { transform: scale(1.06); }
+  #menu button:active { transform: scale(0.97); }
+
+  #level-select {
+    display: flex; gap: 10px; justify-content: center;
+    margin-top: 26px; flex-wrap: wrap;
+  }
+  #level-select .lv {
+    padding: 10px 18px; background: rgba(0,50,80,0.7);
+    border: 1px solid rgba(100,200,255,0.35);
+    border-radius: 8px; color: #c0e0f0;
+    cursor: pointer; font-size: 14px;
+    transition: all 0.15s; font-weight: 600;
+  }
+  #level-select .lv:hover { background: rgba(0,100,150,0.9); color: #fff; }
+  #level-select .lv.active {
+    background: rgba(0,180,255,0.6); color: #fff;
+    border-color: #7fe4ff; box-shadow: 0 0 16px rgba(0,180,255,0.6);
+  }
+</style>
+</head>
+<body>
+<div id="hud"></div>
+<div id="boost-bar"><div id="boost-fill"></div></div>
+<div id="center-msg"></div>
+<div id="menu">
+  <div class="card">
+    <h1>DRONE RACER 3D</h1>
+    <div class="sub">Летай через кольца · обходи здания · ставь рекорды</div>
+    <div class="controls">
+      <div><span class="key">W / S</span>наклон вперёд / назад</div>
+      <div><span class="key">A / D</span>крен влево / вправо</div>
+      <div><span class="key">Q / E</span>поворот влево / вправо</div>
+      <div><span class="key">↑ / ↓</span>тяга вверх / вниз</div>
+      <div><span class="key">SHIFT</span>boost</div>
+      <div><span class="key">V</span>камера (chase / FPV)</div>
+      <div><span class="key">R</span>рестарт&nbsp;&nbsp;&nbsp;<span class="key">N</span>следующий</div>
+      <div><span class="key">P</span>пауза&nbsp;&nbsp;&nbsp;<span class="key">ESC</span>в меню</div>
+    </div>
+    <button id="play-btn">▶ ИГРАТЬ</button>
+    <div id="level-select"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ============================================================
+// КОНСТАНТЫ
+// ============================================================
+const GRAVITY = 9.81;
+const RING_RADIUS = 2.5;
+const RING_TUBE = 0.3;
+const DT = 1 / 60;
+
+// ============================================================
+// УРОВНИ
+// ============================================================
+const LEVELS = [
+  { name: 'Прямая', start: [0, 6, 0],
+    rings: [[0,6,15],[0,6,30],[0,6,45],[0,6,60],[0,6,75]],
+    buildings: [], wind: [0,0,0], gust: 0, targetTime: 22 },
+  { name: 'Слалом', start: [0, 6, 0],
+    rings: [[0,6,15],[7,6,30],[-7,6,45],[7,6,60],[0,6,75]],
+    buildings: [[0,0,22,2.5,8,2.5],[0,0,37,2.5,8,2.5],[0,0,52,2.5,8,2.5]],
+    wind: [0,0,0], gust: 0, targetTime: 35 },
+  { name: 'Вертикаль', start: [0, 6, 0],
+    rings: [[0,6,15],[0,12,30],[0,6,45],[0,15,60],[0,8,75]],
+    buildings: [], wind: [0,0,0], gust: 0.3, targetTime: 40 },
+  { name: 'Ущелье', start: [0, 8, 0],
+    rings: [[0,8,15],[7,8,30],[-7,8,45],[0,12,60],[0,8,85]],
+    buildings: [[5,0,25,4,20,4],[-5,0,25,4,20,4],[0,0,40,5,15,5],
+                [7,0,55,5,22,5],[-7,0,55,5,22,5],[0,0,70,6,18,6]],
+    wind: [0,0,0], gust: 0.5, targetTime: 55 },
+  { name: 'Хаос', start: [0, 12, 0],
+    rings: [[0,12,20],[10,6,40],[-10,15,60],[10,8,80],[0,12,100]],
+    buildings: [[0,0,30,6,15,6],[0,0,50,8,25,8],[-8,0,70,5,20,5],
+                [8,0,70,5,20,5],[0,0,90,6,22,6]],
+    wind: [2.5,0,-1.5], gust: 1.2, targetTime: 70 },
+];
+
+// ============================================================
+// СОСТОЯНИЕ
+// ============================================================
+const game = {
+  state: 'menu',
+  levelIdx: 0, time: 0, score: 0, crashes: 0,
+  countdown: 3, crashTimer: 0, invuln: 0,
+  boostMeter: 1, boosting: false, fpv: false,
+  best: JSON.parse(localStorage.getItem('droneRacerBest') || '{}'),
+};
+
+// ============================================================
+// SCENE
+// ============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a1929);
+scene.fog = new THREE.Fog(0x0a1929, 60, 220);
+
+const camera = new THREE.PerspectiveCamera(78, innerWidth/innerHeight, 0.1, 1000);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ============================================================
+// СВЕТ
+// ============================================================
+scene.add(new THREE.HemisphereLight(0x88ccff, 0x224466, 0.9));
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+sun.position.set(30, 50, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 200;
+sun.shadow.camera.left = -80;
+sun.shadow.camera.right = 80;
+sun.shadow.camera.top = 80;
+sun.shadow.camera.bottom = -80;
+scene.add(sun);
+
+const sunMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(3, 16, 16),
+  new THREE.MeshBasicMaterial({ color: 0xffffcc })
+);
+sunMesh.position.set(80, 120, 60);
+scene.add(sunMesh);
+
+// ============================================================
+// ЗЕМЛЯ
+// ============================================================
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(1000, 1000),
+  new THREE.MeshStandardMaterial({ color: 0x2a4a3a, roughness: 0.9 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(1000, 200, 0x44aaff, 0x1a3a5a);
+grid.material.opacity = 0.25;
+grid.material.transparent = true;
+grid.position.y = 0.02;
+scene.add(grid);
+
+// ============================================================
+// ДРОН
+// ============================================================
+function createDrone() {
+  const g = new THREE.Group();
+  g.rotation.order = 'YXZ';
+
+  const matBody = new THREE.MeshStandardMaterial({ color: 0x1a1a22, metalness: 0.7, roughness: 0.3 });
+  const matAccent = new THREE.MeshStandardMaterial({ color: 0xff6b1a, metalness: 0.5, roughness: 0.4 });
+  const matMotor = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.2 });
+  const matBlade = new THREE.MeshStandardMaterial({
+    color: 0x88ddff, transparent: true, opacity: 0.55,
+    emissive: 0x2266aa, emissiveIntensity: 0.6
+  });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.15, 0.55), matBody);
+  body.castShadow = true;
+  g.add(body);
+
+  const top = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.3), matAccent);
+  top.position.y = 0.11;
+  top.castShadow = true;
+  g.add(top);
+
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.22, 8), matAccent);
+  nose.rotation.x = Math.PI / 2;
+  nose.position.set(0, 0, 0.38);
+  g.add(nose);
+
+  for (const z of [-0.18, 0.18]) {
+    const skid = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.05), matBody);
+    skid.position.set(0, -0.15, z);
+    g.add(skid);
+  }
+
+  const rotors = [];
+  for (const [x, z] of [[0.35,0.35],[-0.35,0.35],[-0.35,-0.35],[0.35,-0.35]]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.5), matBody);
+    arm.rotation.y = Math.atan2(x, z);
+    arm.position.set(x * 0.5, 0, z * 0.5);
+    arm.castShadow = true;
+    g.add(arm);
+
+    const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.1, 12), matMotor);
+    motor.position.set(x, 0.06, z);
+    g.add(motor);
+
+    const rotor = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.015, 16), matBlade);
+    rotor.position.set(x, 0.13, z);
+    rotor.userData.spin = Math.random() > 0.5 ? 1 : -1;
+    g.add(rotor);
+    rotors.push(rotor);
+  }
+  g.userData.rotors = rotors;
+  return g;
+}
+
+const drone = createDrone();
+scene.add(drone);
+
+const DS = {
+  pitch: 0, roll: 0, yaw: 0,
+  targetPitch: 0, targetRoll: 0, targetYawRate: 0,
+  throttle: 0.5,
+  velocity: new THREE.Vector3(),
+};
+
+// ============================================================
+// КОЛЬЦА И ЗДАНИЯ
+// ============================================================
+const ringGroup = new THREE.Group();
+const buildingGroup = new THREE.Group();
+scene.add(ringGroup, buildingGroup);
+let rings = [], buildings = [];
+
+function makeRing(pos) {
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x00ccff, emissive: 0x00aaff, emissiveIntensity: 0.8,
+    metalness: 0.5, roughness: 0.3, transparent: true, opacity: 0.9
+  });
+  const mesh = new THREE.Mesh(new THREE.TorusGeometry(RING_RADIUS, RING_TUBE, 12, 48), mat);
+  mesh.position.set(...pos);
+  mesh.castShadow = true;
+
+  const inner = new THREE.Mesh(
+    new THREE.TorusGeometry(RING_RADIUS - 0.1, 0.05, 8, 48),
+    new THREE.MeshBasicMaterial({ color: 0x88eeff, transparent: true, opacity: 0.7 })
+  );
+  mesh.add(inner);
+
+  const arrow = new THREE.Mesh(
+    new THREE.ConeGeometry(0.4, 1.0, 6),
+    new THREE.MeshBasicMaterial({ color: 0x00ffff })
+  );
+  arrow.position.y = RING_RADIUS + 1.8;
+  arrow.rotation.x = Math.PI;
+  mesh.add(arrow);
+
+  mesh.userData = { passed: false, phase: Math.random() * Math.PI * 2 };
+  return mesh;
+}
+
+function makeBuilding(b) {
+  const [x, y, z, w, h, d] = b;
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshStandardMaterial({ color: 0x3a4a5a, roughness: 0.7, metalness: 0.3 })
+  );
+  mesh.position.set(x, y + h / 2, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(w * 1.02, 0.15, d * 1.02),
+    new THREE.MeshStandardMaterial({ color: 0x8899aa })
+  );
+  roof.position.y = h / 2 + 0.075;
+  mesh.add(roof);
+
+  mesh.userData = { w, h, d };
+  return mesh;
+}
+
+function loadLevel(idx) {
+  while (ringGroup.children.length) ringGroup.remove(ringGroup.children[0]);
+  while (buildingGroup.children.length) buildingGroup.remove(buildingGroup.children[0]);
+  rings = []; buildings = [];
+
+  const lv = LEVELS[idx];
+  lv.rings.forEach(p => {
+    const r = makeRing(p);
+    ringGroup.add(r); rings.push(r);
+  });
+  lv.buildings.forEach(b => {
+    const bld = makeBuilding(b);
+    buildingGroup.add(bld); buildings.push(bld);
+  });
+
+  drone.position.set(...lv.start);
+  DS.pitch = DS.roll = DS.yaw = 0;
+  DS.targetPitch = DS.targetRoll = DS.targetYawRate = 0;
+  DS.throttle = 0.5;
+  DS.velocity.set(0, 0, 0);
+
+  game.time = 0; game.score = 0; game.crashes = 0;
+  game.countdown = 3; game.crashTimer = 0; game.invuln = 0;
+  game.boostMeter = 1; game.state = 'countdown';
+  clearTrail();
+}
+
+// ============================================================
+// ТРЕЙЛ
+// ============================================================
+const trailGroup = new THREE.Group();
+scene.add(trailGroup);
+let trailParts = [], trailTimer = 0;
+
+function clearTrail() {
+  while (trailGroup.children.length) trailGroup.remove(trailGroup.children[0]);
+  trailParts = [];
+}
+
+function updateTrail(dt) {
+  trailTimer += dt;
+  if (game.state === 'playing' && trailTimer >= 0.04) {
+    trailTimer = 0;
+    const p = new THREE.Mesh(
+      new THREE.SphereGeometry(0.15, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0x88ddff, transparent: true, opacity: 0.8 })
+    );
+    p.position.copy(drone.position);
+    trailGroup.add(p);
+    trailParts.push({ mesh: p, life: 1 });
+  }
+  for (let i = trailParts.length - 1; i >= 0; i--) {
+    const p = trailParts[i];
+    p.life -= dt * 2.5;
+    if (p.life <= 0) {
+      trailGroup.remove(p.mesh);
+      p.mesh.geometry.dispose(); p.mesh.material.dispose();
+      trailParts.splice(i, 1);
+    } else {
+      p.mesh.material.opacity = p.life * 0.8;
+      p.mesh.scale.setScalar(0.5 + p.life * 0.5);
+    }
+  }
+}
+
+// ============================================================
+// ВВОД
+// ============================================================
+const keys = {};
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+
+  if (e.code === 'KeyR' && game.state !== 'menu') loadLevel(game.levelIdx);
+  else if (e.code === 'KeyN' && game.state === 'complete') {
+    game.levelIdx = (game.levelIdx + 1) % LEVELS.length;
+    loadLevel(game.levelIdx);
+  }
+  else if (e.code === 'KeyV') game.fpv = !game.fpv;
+  else if (e.code === 'KeyP' && (game.state === 'playing' || game.state === 'paused'))
+    game.state = game.state === 'playing' ? 'paused' : 'playing';
+  else if (e.code === 'Escape' && game.state !== 'menu') {
+    game.state = 'menu';
+    document.getElementById('menu').style.display = 'flex';
+  }
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ============================================================
+// ЗВУК
+// ============================================================
+let audioCtx = null, motorOsc = null, motorGain = null;
+
+function initAudio() {
+  if (audioCtx) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    motorOsc = audioCtx.createOscillator();
+    motorOsc.type = 'sawtooth';
+    motorOsc.frequency.value = 250;
+    motorGain = audioCtx.createGain();
+    motorGain.gain.value = 0;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass'; filter.frequency.value = 900;
+    motorOsc.connect(filter).connect(motorGain).connect(audioCtx.destination);
+    motorOsc.start();
+  } catch (e) {}
+}
+
+function updateAudio() {
+  if (!audioCtx) return;
+  if (game.state !== 'playing') {
+    motorGain.gain.value = Math.max(0, motorGain.gain.value - 0.02);
+    return;
+  }
+  const f = 250 + DS.throttle * 400 + (game.boosting ? 220 : 0);
+  motorOsc.frequency.setTargetAtTime(f, audioCtx.currentTime, 0.05);
+  motorGain.gain.setTargetAtTime(0.035 + DS.throttle * 0.05 + (game.boosting ? 0.03 : 0),
+                                 audioCtx.currentTime, 0.05);
+}
+
+function playPing(freq) {
+  if (!audioCtx) return;
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'sine'; o.frequency.value = freq;
+  g.gain.value = 0.15;
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + 0.3);
+}
+
+function playCrash() {
+  if (!audioCtx) return;
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(180, audioCtx.currentTime);
+  o.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.4);
+  g.gain.value = 0.2;
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+  o.connect(g).connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + 0.4);
+}
+
+function playComplete() {
+  if (!audioCtx) return;
+  [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => playPing(f), i * 120));
+}
+
+// ============================================================
+// КОНТРОЛЛЕР
+// ============================================================
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+function readInput(dt) {
+  const pitchIn = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
+  const rollIn  = (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0);
+  const yawIn   = (keys['KeyE'] ? 1 : 0) - (keys['KeyQ'] ? 1 : 0);  // E=right, Q=left
+  const thrIn   = (keys['ArrowUp'] ? 1 : 0) - (keys['ArrowDown'] ? 1 : 0);
+
+  const smooth = Math.min(1, dt * 6);
+  DS.targetPitch = lerp(DS.targetPitch, pitchIn * 0.65, smooth);
+  DS.targetRoll  = lerp(DS.targetRoll,  rollIn  * 0.75, smooth);
+  DS.targetYawRate = lerp(DS.targetYawRate, yawIn * 2.0, Math.min(1, dt * 10));
+
+  DS.throttle = clamp(DS.throttle + thrIn * dt * 0.7, 0.15, 1.0);
+
+  if (pitchIn === 0) DS.targetPitch = lerp(DS.targetPitch, 0, Math.min(1, dt * 2.5));
+  if (rollIn === 0)  DS.targetRoll  = lerp(DS.targetRoll,  0, Math.min(1, dt * 2.5));
+
+  if ((keys['ShiftLeft'] || keys['ShiftRight']) && game.boostMeter > 0) {
+    game.boostMeter = Math.max(0, game.boostMeter - dt * 0.4);
+    game.boosting = true;
+  } else {
+    game.boosting = false;
+    game.boostMeter = Math.min(1, game.boostMeter + dt * 0.25);
+  }
+}
+
+function applyPhysics(dt) {
+  const k = Math.min(1, dt * 8);
+  DS.pitch = lerp(DS.pitch, DS.targetPitch, k);
+  DS.roll  = lerp(DS.roll,  DS.targetRoll,  k);
+  DS.yaw  += DS.targetYawRate * dt;
+
+  drone.rotation.set(DS.pitch, DS.yaw, DS.roll);
+  drone.updateMatrixWorld();
+
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(drone.quaternion);
+
+  let thrustMag = DS.throttle * GRAVITY * 2.0;
+  if (game.boosting) thrustMag *= 1.6;
+  const thrust = up.clone().multiplyScalar(thrustMag);
+
+  const gravity = new THREE.Vector3(0, -GRAVITY, 0);
+  const drag = DS.velocity.clone().multiplyScalar(-0.35);
+
+  const lv = LEVELS[game.levelIdx];
+  const t = game.time;
+  const gust = lv.gust || 0;
+  const wind = new THREE.Vector3(...lv.wind).add(new THREE.Vector3(
+    Math.sin(t * 1.3) * gust,
+    Math.sin(t * 2.1 + 1.5) * gust * 0.3,
+    Math.cos(t * 1.1 + 0.7) * gust
+  ));
+
+  const acc = thrust.clone().add(gravity).add(drag).add(wind);
+  DS.velocity.addScaledVector(acc, dt);
+  drone.position.addScaledVector(DS.velocity, dt);
+
+  const spin = (DS.throttle + (game.boosting ? 0.5 : 0)) * 40;
+  for (const r of drone.userData.rotors) {
+    r.rotation.y += spin * dt * r.userData.spin;
+  }
+}
+
+function checkCollisions() {
+  for (const r of rings) {
+    if (r.userData.passed) continue;
+    if (drone.position.distanceTo(r.position) < RING_RADIUS * 0.9) {
+      r.userData.passed = true;
+      r.material.color.setHex(0x00ff44);
+      r.material.emissive.setHex(0x00ff00);
+      r.children[0].material.color.setHex(0x88ffaa);
+      r.children[1].visible = false;
+      game.score++;
+      playPing(880);
+      if (game.score >= rings.length) { completeLevel(); return; }
+    }
+  }
+
+  if (game.invuln > 0) return;
+
+  for (const b of buildings) {
+    const dp = drone.position.clone().sub(b.position);
+    const { w, h, d } = b.userData;
+    if (Math.abs(dp.x) < w/2 + 0.3 &&
+        Math.abs(dp.y) < h/2 + 0.3 &&
+        Math.abs(dp.z) < d/2 + 0.3) { crash(); return; }
+  }
+
+  if (drone.position.y < 0.4) crash();
+}
+
+// ============================================================
+// ПЕРЕХОДЫ СОСТОЯНИЙ
+// ============================================================
+function crash() {
+  if (game.invuln > 0) return;
+  game.crashes++;
+  game.time += 5;
+  game.state = 'crashed';
+  game.crashTimer = 1.2;
+  playCrash();
+}
+
+function respawn() {
+  const lv = LEVELS[game.levelIdx];
+  const resetPos = new THREE.Vector3(...lv.start);
+  for (const r of rings) if (r.userData.passed) resetPos.copy(r.position);
+  resetPos.y += 1.5; resetPos.z -= 2;
+  drone.position.copy(resetPos);
+  DS.velocity.set(0, 0, 0);
+  DS.pitch = DS.roll = 0; DS.yaw = 0;
+  DS.throttle = 0.5;
+  DS.targetPitch = DS.targetRoll = DS.targetYawRate = 0;
+  game.boostMeter = 1;
+  game.invuln = 1.5;
+  game.state = 'playing';
+}
+
+function completeLevel() {
+  game.state = 'complete';
+  const lv = LEVELS[game.levelIdx];
+  const t = game.time;
+  const prev = game.best[lv.name] || 9999;
+  let isBest = false;
+  if (t < prev) {
+    game.best[lv.name] = t;
+    localStorage.setItem('droneRacerBest', JSON.stringify(game.best));
+    isBest = true;
+  }
+  const stars = t < lv.targetTime ? 3 : (t < lv.targetTime * 1.5 ? 2 : 1);
+  playComplete();
+  showCenterMsg(
+    '✅ УРОВЕНЬ ПРОЙДЕН!',
+    `Время: ${t.toFixed(2)} с${isBest ? '  🏆 НОВЫЙ РЕКОРД!' : ''}<br>Штрафы: ${game.crashes}<br>Рейтинг: ${'★'.repeat(stars)}${'☆'.repeat(3-stars)}`,
+    '[N] — следующий уровень    [R] — рестарт'
+  );
+}
+
+// ============================================================
+// HUD
+// ============================================================
+const hudEl = document.getElementById('hud');
+const boostFill = document.getElementById('boost-fill');
+const centerMsg = document.getElementById('center-msg');
+
+function updateHUD() {
+  const speed = DS.velocity.length();
+  const alt = Math.max(0, drone.position.y);
+  hudEl.innerHTML = `
+    ⏱ <span class="val">${game.time.toFixed(2)}</span> с<br>
+    🎯 <span class="val">${game.score}/${rings.length}</span><br>
+    📏 <span class="val">${alt.toFixed(1)}</span> м<br>
+    💨 <span class="val">${speed.toFixed(1)}</span> м/с<br>
+    💥 <span class="val">${game.crashes}</span>
+  `;
+  boostFill.style.width = (game.boostMeter * 100) + '%';
+}
+
+function showCenterMsg(title, sub, hint) {
+  centerMsg.innerHTML = `<h1>${title}</h1><p>${sub}</p>` +
+    (hint ? `<small>${hint}</small>` : '');
+}
+function clearCenterMsg() { centerMsg.innerHTML = ''; }
+
+// ============================================================
+// КАМЕРА
+// ============================================================
+const camTarget = new THREE.Vector3();
+const camUpVec = new THREE.Vector3(0, 1, 0);
+
+function updateCamera(dt) {
+  if (game.fpv) {
+    const offset = new THREE.Vector3(0, 0.15, 0.4).applyQuaternion(drone.quaternion);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(drone.quaternion);
+    camera.position.lerp(drone.position.clone().add(offset), Math.min(1, dt * 20));
+    camera.up.copy(new THREE.Vector3(0, 1, 0).applyQuaternion(drone.quaternion));
+    camera.lookAt(camera.position.clone().add(fwd));
+    camera.fov = game.boosting ? 95 : 85;
+  } else {
+    const back = new THREE.Vector3(0, 0, -1).applyQuaternion(drone.quaternion);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(drone.quaternion);
+    const dist = 8 + (game.boosting ? 2 : 0);
+    camTarget.copy(drone.position)
+      .addScaledVector(back, dist)
+      .addScaledVector(up, 3);
+    camTarget.y = Math.max(camTarget.y, 1.5);
+    camera.position.lerp(camTarget, Math.min(1, dt * 6));
+    camera.up.copy(camUpVec);
+    camera.lookAt(drone.position);
+    camera.fov = lerp(camera.fov, game.boosting ? 90 : 78, Math.min(1, dt * 4));
+  }
+  camera.updateProjectionMatrix();
+}
+
+// ============================================================
+// ГЛАВНЫЙ ЦИКЛ
+// ============================================================
+let lastTime = performance.now();
+let accum = 0;
+
+function tick() {
+  requestAnimationFrame(tick);
+  const now = performance.now();
+  let frameDt = (now - lastTime) / 1000;
+  lastTime = now;
+  if (frameDt > 0.1) frameDt = 0.1;
+
+  if (game.state === 'menu') {
+    const t = now / 1000;
+    camera.position.set(Math.cos(t * 0.25) * 14 + drone.position.x,
+                        drone.position.y + 4,
+                        drone.position.z - 10 + Math.sin(t * 0.25) * 14);
+    camera.up.copy(camUpVec);
+    camera.lookAt(drone.position);
+    renderer.render(scene, camera);
+    return;
+  }
+
+  if (game.state === 'paused') {
+    showCenterMsg('⏸ ПАУЗА', '', '[P] продолжить');
+    renderer.render(scene, camera);
+    return;
+  }
+
+  accum += frameDt;
+  while (accum >= DT) {
+    if (game.state === 'countdown') {
+      game.countdown -= DT;
+      showCenterMsg(
+        `Уровень ${game.levelIdx + 1}: ${LEVELS[game.levelIdx].name}`,
+        `${Math.max(1, Math.ceil(game.countdown))}`,
+        'Приготовься...'
+      );
+      if (game.countdown <= 0) { game.state = 'playing'; clearCenterMsg(); }
+    } else if (game.state === 'crashed') {
+      game.crashTimer -= DT;
+      showCenterMsg('💥 КРАШ!', '+5 секунд', '');
+      if (game.crashTimer <= 0) { respawn(); clearCenterMsg(); }
+    } else if (game.state === 'playing') {
+      game.time += DT;
+      if (game.invuln > 0) game.invuln -= DT;
+      readInput(DT);
+      applyPhysics(DT);
+      checkCollisions();
+    }
+    accum -= DT;
+  }
+
+  updateTrail(frameDt);
+
+  const tSec = now / 1000;
+  for (const r of rings) {
+    if (!r.userData.passed) {
+      r.rotation.z = tSec * 0.8;
+      r.scale.setScalar(1 + Math.sin(tSec * 3 + r.userData.phase) * 0.05);
+    } else r.scale.setScalar(1);
+  }
+
+  updateCamera(frameDt);
+  updateAudio();
+  updateHUD();
+  renderer.render(scene, camera);
+}
+
+// ============================================================
+// МЕНЮ
+// ============================================================
+function buildLevelButtons() {
+  const c = document.getElementById('level-select');
+  c.innerHTML = '';
+  LEVELS.forEach((lv, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'lv' + (i === game.levelIdx ? ' active' : '');
+    const best = game.best[lv.name];
+    btn.textContent = `${i + 1}. ${lv.name}` + (best ? ` (${best.toFixed(1)}с)` : '');
+    btn.onclick = () => { game.levelIdx = i; buildLevelButtons(); };
+    c.appendChild(btn);
+  });
+}
+
+document.getElementById('play-btn').onclick = () => {
+  initAudio();
+  document.getElementById('menu').style.display = 'none';
+  loadLevel(game.levelIdx);
+};
+
+buildLevelButtons();
+loadLevel(0);
+game.state = 'menu';
+tick();
+</script>
+</body>
+</html>
