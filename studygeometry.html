@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Геометрия 7–11 · Интерактивный учебник</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --bg:#080b16;
+  --card:rgba(255,255,255,.055);
+  --card-h:rgba(255,255,255,.1);
+  --stroke:rgba(255,255,255,.12);
+  --text:#e9efff;
+  --muted:#94a3c4;
+  --a1:#6c5ce7;
+  --a2:#00d2ff;
+  --a3:#ff6b9d;
+  --a4:#ffd166;
+  --ok:#22c55e;
+  --bad:#ef4444;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Segoe UI',system-ui,-apple-system,'Helvetica Neue',sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;
+  line-height:1.6;-webkit-font-smoothing:antialiased;
+}
+/* ---------- фон ---------- */
+.bg{position:fixed;inset:0;z-index:-2;background:radial-gradient(circle at 15% 10%,#171e42,#080b16 55%)}
+.blob{position:fixed;border-radius:50%;filter:blur(110px);opacity:.4;z-index:-1;pointer-events:none}
+.b1{width:520px;height:520px;background:#6c5ce7;top:-160px;left:-140px;animation:fl 22s ease-in-out infinite}
+.b2{width:460px;height:460px;background:#00d2ff;bottom:-180px;right:-120px;animation:fl 26s ease-in-out infinite reverse}
+.b3{width:380px;height:380px;background:#ff6b9d;top:45%;left:55%;animation:fl 30s ease-in-out infinite}
+@keyframes fl{
+  0%,100%{transform:translate(0,0) scale(1)}
+  33%{transform:translate(70px,-50px) scale(1.15)}
+  66%{transform:translate(-60px,60px) scale(.9)}
+}
+/* ---------- шапка ---------- */
+header{
+  position:sticky;top:0;z-index:50;
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  background:rgba(8,11,22,.72);
+  border-bottom:1px solid var(--stroke);
+}
+.top{max-width:1240px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:11px;font-weight:800;font-size:1.12rem;letter-spacing:.3px;white-space:nowrap}
+.logo .mark{
+  width:38px;height:38px;border-radius:12px;flex:none;
+  background:linear-gradient(135deg,var(--a1),var(--a2));
+  display:grid;place-items:center;font-size:1.25rem;
+  box-shadow:0 6px 22px rgba(108,92,231,.55);
+  animation:spin 9s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.logo small{display:block;font-size:.68rem;font-weight:500;color:var(--muted);letter-spacing:0}
+nav{display:flex;gap:7px;overflow-x:auto;padding:4px 0;scrollbar-width:none;flex:1;min-width:0}
+nav::-webkit-scrollbar{display:none}
+.nav-btn{
+  background:transparent;border:1px solid transparent;color:var(--muted);
+  padding:8px 15px;border-radius:11px;cursor:pointer;font-size:.88rem;font-weight:600;
+  white-space:nowrap;transition:.22s;font-family:inherit;
+}
+.nav-btn:hover{color:var(--text);background:var(--card)}
+.nav-btn.active{
+  color:#fff;background:linear-gradient(135deg,rgba(108,92,231,.85),rgba(0,210,255,.55));
+  border-color:rgba(255,255,255,.2);box-shadow:0 6px 20px rgba(108,92,231,.35);
+}
+/* ---------- страницы ---------- */
+main{max-width:1240px;margin:0 auto;padding:36px 20px 90px}
+.page{display:none}
+.page.active{display:block;animation:up .5s cubic-bezier(.2,.7,.3,1)}
+@keyframes up{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+h1{font-size:clamp(1.9rem,4.6vw,3rem);line-height:1.15;font-weight:800;letter-spacing:-.5px}
+h2{font-size:clamp(1.35rem,2.6vw,1.9rem);margin-bottom:8px;font-weight:750}
+h3{font-size:1.08rem;font-weight:700;margin-bottom:6px}
+.grad{background:linear-gradient(115deg,#8b7cff,#00d2ff 45%,#ff6b9d);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{color:var(--muted);font-size:1.03rem;max-width:720px}
+.sec-head{margin-bottom:26px}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;font-size:.75rem;font-weight:700;
+  padding:5px 13px;border-radius:999px;background:var(--card);border:1px solid var(--stroke);
+  color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:14px;
+}
+/* ---------- герой ---------- */
+.hero{display:grid;grid-template-columns:1.15fr .85fr;gap:36px;align-items:center;min-height:64vh}
+@media(max-width:880px){.hero{grid-template-columns:1fr;min-height:auto;gap:26px}}
+.hero-art{
+  position:relative;height:340px;display:grid;place-items:center;
+}
+.hero-art .ring{
+  position:absolute;border-radius:50%;border:1.5px dashed rgba(255,255,255,.16);
+}
+.r1{width:300px;height:300px;animation:spin 28s linear infinite}
+.r2{width:210px;height:210px;border-style:solid;border-color:rgba(0,210,255,.22);animation:spin 18s linear infinite reverse}
+.r3{width:120px;height:120px;border-color:rgba(255,107,157,.3);animation:spin 12s linear infinite}
+.hero-core{
+  width:110px;height:110px;border-radius:26px;
+  background:linear-gradient(140deg,var(--a1),var(--a2));
+  box-shadow:0 0 70px rgba(108,92,231,.75),inset 0 0 40px rgba(255,255,255,.18);
+  display:grid;place-items:center;font-size:3rem;
+  animation:bob 4.5s ease-in-out infinite;
+}
+@keyframes bob{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-18px) rotate(8deg)}}
+.orb{position:absolute;border-radius:50%;box-shadow:0 0 24px currentColor}
+.o1{width:16px;height:16px;color:#ffd166;background:#ffd166;top:8%;left:18%;animation:bob 5s ease-in-out infinite}
+.o2{width:12px;height:12px;color:#ff6b9d;background:#ff6b9d;bottom:12%;right:16%;animation:bob 6.5s ease-in-out infinite .6s}
+.o3{width:10px;height:10px;color:#00d2ff;background:#00d2ff;top:70%;left:8%;animation:bob 5.8s ease-in-out infinite 1.2s}
+.cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
+.btn{
+  border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:.95rem;
+  padding:13px 26px;border-radius:14px;transition:.25s;
+}
+.btn-p{background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;box-shadow:0 10px 30px rgba(108,92,231,.45)}
+.btn-p:hover{transform:translateY(-3px);box-shadow:0 16px 40px rgba(108,92,231,.6)}
+.btn-g{background:var(--card);color:var(--text);border:1px solid var(--stroke)}
+.btn-g:hover{background:var(--card-h);transform:translateY(-3px)}
+/* ---------- карточки ---------- */
+.grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(258px,1fr))}
+.card{
+  background:var(--card);border:1px solid var(--stroke);border-radius:20px;padding:22px;
+  transition:.3s;position:relative;overflow:hidden;
+}
+.card::before{
+  content:'';position:absolute;inset:0;opacity:0;transition:.3s;
+  background:radial-gradient(400px circle at var(--mx,50%) var(--my,50%),rgba(108,92,231,.16),transparent 65%);
+}
+.card:hover{transform:translateY(-6px);border-color:rgba(108,92,231,.5);background:var(--card-h)}
+.card:hover::before{opacity:1}
+.card .ico{font-size:1.8rem;margin-bottom:12px;display:block}
+.card p{color:var(--muted);font-size:.92rem}
+.card .tag{
+  display:inline-block;margin-top:12px;font-size:.72rem;font-weight:700;
+  color:var(--a2);background:rgba(0,210,255,.1);border:1px solid rgba(0,210,255,.25);
+  padding:3px 10px;border-radius:999px;
+}
+.clickable{cursor:pointer}
+/* ---------- аккордеон / детали ---------- */
+details{
+  background:var(--card);border:1px solid var(--stroke);border-radius:16px;
+  margin-bottom:12px;overflow:hidden;transition:.25s;
+}
+details[open]{border-color:rgba(108,92,231,.45);background:rgba(108,92,231,.07)}
+summary{
+  padding:16px 20px;cursor:pointer;font-weight:700;font-size:1rem;
+  display:flex;align-items:center;gap:12px;list-style:none;user-select:none;
+}
+summary::-webkit-details-marker{display:none}
+summary::after{content:'＋';margin-left:auto;color:var(--a2);font-size:1.25rem;transition:.25s;font-weight:400}
+details[open] summary::after{transform:rotate(45deg)}
+summary:hover{background:rgba(255,255,255,.03)}
+.body{padding:0 20px 20px;color:var(--muted);font-size:.94rem;animation:up .35s}
+.body strong{color:var(--text)}
+.formula{
+  display:inline-block;background:rgba(0,210,255,.09);border:1px solid rgba(0,210,255,.22);
+  color:#a8ecff;padding:4px 12px;border-radius:9px;font-family:'Consolas',monospace;
+  font-size:.9rem;margin:5px 6px 5px 0;
+}
+.axiom-num{
+  width:34px;height:34px;border-radius:10px;flex:none;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--a1),var(--a2));font-weight:800;font-size:.9rem;color:#fff;
+}
+.ax{background:rgba(255,255,255,.04);border:1px solid var(--stroke);border-radius:18px;padding:20px;margin-bottom:14px;transition:.25s}
+.ax:hover{border-color:rgba(0,210,255,.4);transform:translateX(6px)}
+.ax .hd{display:flex;gap:14px;align-items:center;margin-bottom:10px}
+.ax .hd b{font-size:1.02rem}
+.ax p{color:var(--muted);font-size:.93rem}
+/* ---------- 3D ---------- */
+.viewer{display:grid;grid-template-columns:270px 1fr;gap:18px}
+@media(max-width:880px){.viewer{grid-template-columns:1fr}}
+.shape-list{display:flex;flex-direction:column;gap:8px}
+.shape-btn{
+  background:var(--card);border:1px solid var(--stroke);color:var(--muted);
+  padding:11px 15px;border-radius:13px;cursor:pointer;text-align:left;
+  font-family:inherit;font-size:.9rem;font-weight:600;transition:.22s;display:flex;align-items:center;gap:10px;
+}
+.shape-btn:hover{background:var(--card-h);color:var(--text);transform:translateX(4px)}
+.shape-btn.active{
+  background:linear-gradient(135deg,rgba(108,92,231,.8),rgba(0,210,255,.5));
+  color:#fff;border-color:rgba(255,255,255,.25);
+}
+.stage{
+  position:relative;border-radius:22px;overflow:hidden;
+  border:1px solid var(--stroke);background:radial-gradient(circle at 50% 40%,rgba(108,92,231,.16),rgba(8,11,22,.9));
+  min-height:430px;
+}
+#scene3d{display:block;width:100%;height:100%;position:absolute;inset:0;cursor:grab}
+#scene3d:active{cursor:grabbing}
+.stage-hint{
+  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  font-size:.76rem;color:var(--muted);background:rgba(8,11,22,.7);
+  padding:6px 15px;border-radius:999px;border:1px solid var(--stroke);white-space:nowrap;
+}
+.stage-tools{position:absolute;top:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.tool{
+  background:rgba(8,11,22,.75);border:1px solid var(--stroke);color:var(--muted);
+  padding:7px 13px;border-radius:10px;cursor:pointer;font-size:.78rem;font-weight:600;
+  font-family:inherit;transition:.2s;backdrop-filter:blur(8px);
+}
+.tool:hover{color:#fff;border-color:var(--a2)}
+.tool.on{background:linear-gradient(135deg,var(--a1),var(--a2));color:#fff;border-color:transparent}
+.info-box{
+  margin-top:16px;background:var(--card);border:1px solid var(--stroke);
+  border-radius:18px;padding:20px;animation:up .4s;
+}
+.info-box h3{color:var(--a2);margin-bottom:8px}
+/* ---------- тест ---------- */
+.quiz-wrap{max-width:760px;margin:0 auto}
+.qbar{height:9px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;margin-bottom:22px}
+.qbar span{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--a1),var(--a2));transition:width .45s cubic-bezier(.2,.7,.3,1)}
+.qmeta{display:flex;justify-content:space-between;color:var(--muted);font-size:.85rem;font-weight:600;margin-bottom:14px}
+.qtext{font-size:1.18rem;font-weight:700;margin-bottom:20px;line-height:1.45}
+.opts{display:flex;flex-direction:column;gap:10px}
+.opt{
+  background:var(--card);border:1px solid var(--stroke);color:var(--text);
+  padding:15px 19px;border-radius:15px;cursor:pointer;text-align:left;
+  font-family:inherit;font-size:.96rem;transition:.2s;display:flex;gap:13px;align-items:center;
+}
+.opt:hover:not(.locked){background:var(--card-h);border-color:rgba(108,92,231,.6);transform:translateX(6px)}
+.opt .letter{
+  width:29px;height:29px;flex:none;border-radius:9px;display:grid;place-items:center;
+  background:rgba(255,255,255,.08);font-weight:800;font-size:.83rem;
+}
+.opt.correct{background:rgba(34,197,94,.16);border-color:var(--ok);color:#b6f5cf}
+.opt.correct .letter{background:var(--ok);color:#fff}
+.opt.wrong{background:rgba(239,68,68,.14);border-color:var(--bad);color:#ffc4c4}
+.opt.wrong .letter{background:var(--bad);color:#fff}
+.explain{
+  margin-top:16px;padding:15px 18px;border-radius:14px;font-size:.9rem;
+  background:rgba(0,210,255,.08);border-left:3px solid var(--a2);color:#bfe9ff;animation:up .35s;
+}
+.result{text-align:center;padding:30px 0;animation:up .5s}
+.result .big{font-size:4.4rem;font-weight:800;line-height:1;margin-bottom:10px}
+/* ---------- повторение ---------- */
+.rev-check{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:.93rem;color:var(--muted);cursor:pointer}
+.rev-check input{width:18px;height:18px;accent-color:var(--a1);cursor:pointer;flex:none}
+.rev-check.done{color:var(--ok);text-decoration:line-through;opacity:.65}
+/* ---------- футер ---------- */
+footer{
+  border-top:1px solid var(--stroke);padding:30px 20px;text-align:center;
+  color:var(--muted);font-size:.85rem;
+}
+footer b{color:var(--text)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:#0a0e1a}
+::-webkit-scrollbar-thumb{background:#2a3355;border-radius:9px}
+::-webkit-scrollbar-thumb:hover{background:#3c4778}
+</style>
+</head>
+<body>
+
+<div class="bg"></div>
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+
+<header>
+  <div class="top">
+    <div class="logo">
+      <div class="mark">📐</div>
+      <div>Геометрия 7–11<small>по учебнику Атанасяна Л.С. и др.</small></div>
+    </div>
+    <nav id="nav">
+      <button class="nav-btn active" data-page="home">🏠 Главная</button>
+      <button class="nav-btn" data-page="plani">📏 Планиметрия</button>
+      <button class="nav-btn" data-page="stereo">🧊 Стереометрия</button>
+      <button class="nav-btn" data-page="axioms">📜 Аксиомы</button>
+      <button class="nav-btn" data-page="theorems">🎯 Теоремы</button>
+      <button class="nav-btn" data-page="threed">🌐 3D-фигуры</button>
+      <button class="nav-btn" data-page="review">🔁 Повторение</button>
+      <button class="nav-btn" data-page="quiz">🎮 Тест-игра</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ================= ГЛАВНАЯ ================= -->
+<section class="page active" id="home">
+  <div class="hero">
+    <div>
+      <div class="chip">✨ интерактивный учебник</div>
+      <h1>Геометрия — это <span class="grad">не скучно</span>.<br>Это красиво.</h1>
+      <p class="lead" style="margin-top:16px">
+        Аксиомы, теоремы, планиметрия и стереометрия в одном месте. Крути объёмные фигуры мышкой,
+        проверяй себя в тестах и повторяй материал с 7 по 11 класс — без зубрёжки.
+      </p>
+      <div class="cta">
+        <button class="btn btn-p" onclick="go('threed')">🌐 Покрутить 3D-фигуры</button>
+        <button class="btn btn-g" onclick="go('quiz')">🎮 Пройти тест</button>
+      </div>
+    </div>
+    <div class="hero-art">
+      <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
+      <div class="hero-core">📐</div>
+      <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+    </div>
+  </div>
+
+  <h2 style="margin:52px 0 6px">С чего начать?</h2>
+  <p class="lead" style="margin-bottom:22px">Выбери раздел — каждый открывается в один клик.</p>
+
+  <div class="grid">
+    <div class="card clickable" onclick="go('plani')">
+      <span class="ico">📏</span>
+      <h3>Планиметрия</h3>
+      <p>Треугольники, четырёхугольники, окружность, векторы и координаты, площади фигур.</p>
+      <span class="tag">7–9 класс</span>
+    </div>
+    <div class="card clickable" onclick="go('stereo')">
+      <span class="ico">🧊</span>
+      <h3>Стереометрия</h3>
+      <p>Параллельность, перпендикулярность, многогранники, тела вращения, объёмы.</p>
+      <span class="tag">10–11 класс</span>
+    </div>
+    <div class="card clickable" onclick="go('axioms')">
+      <span class="ico">📜</span>
+      <h3>Аксиомы</h3>
+      <p>Три аксиомы стереометрии и их следствия — фундамент всей геометрии в пространстве.</p>
+      <span class="tag">основа основ</span>
+    </div>
+    <div class="card clickable" onclick="go('theorems')">
+      <span class="ico">🎯</span>
+      <h3>Теоремы</h3>
+      <p>Ключевые теоремы с доказательствами. Открывай по одной, как уровни в игре.</p>
+      <span class="tag">с доказательствами</span>
+    </div>
+    <div class="card clickable" onclick="go('threed')">
+      <span class="ico">🌐</span>
+      <h3>3D-демонстрации</h3>
+      <p>Вращай куб, пирамиду, конус и шар. Смотри на фигуры с любой стороны.</p>
+      <span class="tag">интерактив</span>
+    </div>
+    <div class="card clickable" onclick="go('review')">
+      <span class="ico">🔁</span>
+      <h3>Повторение 7–11</h3>
+      <p>Чек-лист всего курса по классам. Отмечай пройденное и следи за прогрессом.</p>
+      <span class="tag">весь курс</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ПЛАНИМЕТРИЯ ================= -->
+<section class="page" id="plani">
+  <div class="sec-head">
+    <div class="chip">📏 раздел I</div>
+    <h2>Планиметрия <span class="grad">7–9 класс</span></h2>
+    <p class="lead">Геометрия на плоскости: фигуры, их свойства и формулы. Нажми на тему, чтобы раскрыть конспект.</p>
+  </div>
+
+  <details open>
+    <summary>🔺 Треугольники</summary>
+    <div class="body">
+      <p><strong>Сумма углов треугольника равна 180°.</strong> Внешний угол равен сумме двух внутренних, не смежных с ним.</p>
+      <p style="margin-top:12px"><strong>Признаки равенства:</strong> по двум сторонам и углу между ними; по стороне и двум прилежащим углам; по трём сторонам.</p>
+      <p style="margin-top:12px"><strong>Признаки подобия:</strong> по двум углам; по двум сторонам и углу между ними; по трём сторонам.</p>
+      <p style="margin-top:12px"><strong>Теорема косинусов:</strong> <span class="formula">c² = a² + b² − 2ab·cos C</span></p>
+      <p><strong>Теорема синусов:</strong> <span class="formula">a / sin A = b / sin B = c / sin C = 2R</span></p>
+      <p style="margin-top:12px"><strong>Площадь:</strong>
+        <span class="formula">S = ½·a·h</span>
+        <span class="formula">S = ½·a·b·sin C</span>
+        <span class="formula">S = √(p(p−a)(p−b)(p−c))</span>
+        <span class="formula">S = p·r</span>
+      </p>
+      <p style="margin-top:12px"><strong>Медианы</strong> пересекаются в одной точке и делятся ею в отношении 2 : 1, считая от вершины.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>🟦 Четырёхугольники</summary>
+    <div class="body">
+      <p><strong>Параллелограмм:</strong> противоположные стороны и углы равны, диагонали точкой пересечения делятся пополам.
+        <span class="formula">S = a·h</span> <span class="formula">S = ab·sin α</span></p>
+      <p style="margin-top:12px"><strong>Прямоугольник:</strong> диагонали равны. <span class="formula">S = ab</span></p>
+      <p style="margin-top:12px"><strong>Ромб:</strong> диагонали взаимно перпендикулярны и делят углы пополам.
+        <span class="formula">S = ½·d₁·d₂</span></p>
+      <p style="margin-top:12px"><strong>Трапеция:</strong> средняя линия параллельна основаниям и равна их полусумме.
+        <span class="formula">S = ½(a + b)·h</span></p>
+      <p style="margin-top:12px"><strong>Сумма углов выпуклого n-угольника:</strong> <span class="formula">180°·(n − 2)</span></p>
+    </div>
+  </details>
+
+  <details>
+    <summary>⭕ Окружность и круг</summary>
+    <div class="body">
+      <p><strong>Вписанный угол</strong> равен половине центрального, опирающегося на ту же дугу.</p>
+      <p style="margin-top:10px"><strong>Угол между касательной и хордой</strong> равен половине дуги, заключённой между ними.</p>
+      <p style="margin-top:10px"><strong>Вписанный угол, опирающийся на диаметр,</strong> — прямой (90°).</p>
+      <p style="margin-top:10px"><strong>Произведение отрезков хорд:</strong> <span class="formula">AM · MB = CM · MD</span></p>
+      <p style="margin-top:10px"><strong>Квадрат касательной:</strong> <span class="formula">MT² = MA · MB</span></p>
+      <p style="margin-top:10px"><strong>Длина окружности:</strong> <span class="formula">C = 2πR</span>
+        <strong>Площадь круга:</strong> <span class="formula">S = πR²</span>
+        <strong>Сектор:</strong> <span class="formula">S = (πR²·α)/360°</span></p>
+    </div>
+  </details>
+
+  <details>
+    <summary>➡️ Векторы и координаты</summary>
+    <div class="body">
+      <p><strong>Действия:</strong> сложение по правилу треугольника и параллелограмма, умножение на число, вычитание.</p>
+      <p style="margin-top:10px"><strong>Скалярное произведение:</strong> <span class="formula">a⃗·b⃗ = |a⃗||b⃗|·cos φ</span>
+        <span class="formula">a⃗·b⃗ = x₁x₂ + y₁y₂</span></p>
+      <p style="margin-top:10px"><strong>Длина вектора:</strong> <span class="formula">|a⃗| = √(x² + y²)</span></p>
+      <p style="margin-top:10px"><strong>Расстояние между точками:</strong> <span class="formula">d = √((x₂−x₁)² + (y₂−y₁)²)</span></p>
+      <p style="margin-top:10px"><strong>Уравнение окружности:</strong> <span class="formula">(x − x₀)² + (y − y₀)² = R²</span></p>
+    </div>
+  </details>
+
+  <details>
+    <summary>🔄 Движения и подобие</summary>
+    <div class="body">
+      <p><strong>Движения</strong> (симметрия, поворот, параллельный перенос) сохраняют расстояния и углы.</p>
+      <p style="margin-top:10px"><strong>Подобие</strong> сохраняет углы и отношение отрезков. Коэффициент подобия k:
+        <span class="formula">P₂/P₁ = k</span> <span class="formula">S₂/S₁ = k²</span></p>
+    </div>
+  </details>
+</section>
+
+<!-- ================= СТЕРЕОМЕТРИЯ ================= -->
+<section class="page" id="stereo">
+  <div class="sec-head">
+    <div class="chip">🧊 раздел II</div>
+    <h2>Стереометрия <span class="grad">10–11 класс</span></h2>
+    <p class="lead">Геометрия в пространстве. Здесь фигуры живут в трёх измерениях — и это меняет всё.</p>
+  </div>
+
+  <details open>
+    <summary>🔀 Параллельность прямых и плоскостей</summary>
+    <div class="body">
+      <p><strong>Две прямые в пространстве</strong> могут пересекаться, быть параллельными или скрещиваться.</p>
+      <p style="margin-top:10px"><strong>Скрещивающиеся</strong> — прямые, которые не лежат в одной плоскости.</p>
+      <p style="margin-top:10px"><strong>Признак параллельности прямой и плоскости:</strong> если прямая, не лежащая в плоскости, параллельна какой-нибудь прямой этой плоскости, то она параллельна самой плоскости.</p>
+      <p style="margin-top:10px"><strong>Признак параллельности плоскостей:</strong> если две пересекающиеся прямые одной плоскости соответственно параллельны двум прямым другой, то плоскости параллельны.</p>
+      <p style="margin-top:10px">Через две скрещивающиеся прямые можно провести параллельные плоскости — расстояние между ними называется <strong>расстоянием между прямыми</strong>.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>📐 Перпендикулярность</summary>
+    <div class="body">
+      <p><strong>Признак перпендикулярности прямой и плоскости:</strong> если прямая перпендикулярна двум пересекающимся прямым плоскости, то она перпендикулярна всей плоскости.</p>
+      <p style="margin-top:10px"><strong>Теорема о трёх перпендикулярах:</strong> прямая, проведённая в плоскости через основание наклонной, перпендикулярна наклонной тогда и только тогда, когда она перпендикулярна её проекции.</p>
+      <p style="margin-top:10px"><strong>Перпендикуляр и наклонная:</strong> <span class="formula">AB² = AC² + BC²</span> (AB — наклонная, AC — перпендикуляр, BC — проекция).</p>
+      <p style="margin-top:10px"><strong>Угол между прямой и плоскостью</strong> — угол между прямой и её проекцией на плоскость.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>🔷 Многогранники</summary>
+    <div class="body">
+      <p><strong>Призма:</strong> <span class="formula">V = S·h</span> <span class="formula">S_бок = P_осн · h</span></p>
+      <p style="margin-top:10px"><strong>Пирамида:</strong> <span class="formula">V = ⅓·S·h</span>
+        <strong>Правильная пирамида:</strong> <span class="formula">S_бок = ½·P_осн · l</span> (l — апофема)</p>
+      <p style="margin-top:10px"><strong>Теорема Эйлера</strong> для выпуклого многогранника: <span class="formula">В − Р + Г = 2</span></p>
+      <p style="margin-top:10px"><strong>Правильных многогранников ровно пять:</strong> тетраэдр, куб, октаэдр, додекаэдр, икосаэдр.</p>
+      <p style="margin-top:10px"><strong>Сечение:</strong> если плоскость параллельна основанию пирамиды, она отсекает подобную пирамиду с коэффициентом k, площади относятся как k².</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>⚪ Тела вращения</summary>
+    <div class="body">
+      <p><strong>Цилиндр:</strong> <span class="formula">V = πR²h</span> <span class="formula">S_бок = 2πRh</span> <span class="formula">S_полн = 2πR(R + h)</span></p>
+      <p style="margin-top:10px"><strong>Конус:</strong> <span class="formula">V = ⅓πR²h</span> <span class="formula">S_бок = πRl</span> <span class="formula">l² = R² + h²</span></p>
+      <p style="margin-top:10px"><strong>Шар и сфера:</strong> <span class="formula">V = 4/3·πR³</span> <span class="formula">S = 4πR²</span></p>
+      <p style="margin-top:10px"><strong>Шаровой сегмент:</strong> <span class="formula">V = πh²(R − h/3)</span></p>
+    </div>
+  </details>
+
+  <details>
+    <summary>➡️ Векторы и координаты в пространстве</summary>
+    <div class="body">
+      <p><strong>Координаты вектора:</strong> <span class="formula">a⃗ {x₂−x₁; y₂−y₁; z₂−z₁}</span></p>
+      <p style="margin-top:10px"><strong>Длина:</strong> <span class="formula">|a⃗| = √(x² + y² + z²)</span></p>
+      <p style="margin-top:10px"><strong>Скалярное произведение:</strong> <span class="formula">a⃗·b⃗ = x₁x₂ + y₁y₂ + z₁z₂</span></p>
+      <p style="margin-top:10px"><strong>Угол между векторами:</strong> <span class="formula">cos φ = (a⃗·b⃗)/(|a⃗||b⃗|)</span></p>
+      <p style="margin-top:10px"><strong>Уравнение сферы:</strong> <span class="formula">(x−x₀)² + (y−y₀)² + (z−z₀)² = R²</span></p>
+    </div>
+  </details>
+</section>
+
+<!-- ================= АКСИОМЫ ================= -->
+<section class="page" id="axioms">
+  <div class="sec-head">
+    <div class="chip">📜 фундамент</div>
+    <h2>Аксиомы <span class="grad">стереометрии</span></h2>
+    <p class="lead">Три аксиомы, из которых вырастает вся геометрия в пространстве. Их не доказывают — их принимают.</p>
+  </div>
+
+  <div class="ax">
+    <div class="hd"><div class="axiom-num">А1</div><b>Аксиома плоскости</b></div>
+    <p>Через любые три точки, не лежащие на одной прямой, проходит плоскость, и притом <strong>только одна</strong>.</p>
+    <p style="margin-top:8px;color:#8ad9ff">💡 Плоскость обозначают греческими буквами: α, β, γ. Три точки задают плоскость однозначно — как три ножки стула.</p>
+  </div>
+
+  <div class="ax">
+    <div class="hd"><div class="axiom-num">А2</div><b>Аксиома прямой в плоскости</b></div>
+    <p>Если две точки прямой лежат в плоскости, то <strong>все точки этой прямой</strong> лежат в этой плоскости.</p>
+    <p style="margin-top:8px;color:#8ad9ff">💡 Прямая «приклеена» к плоскости, если хотя бы две её точки на ней.</p>
+  </div>
+
+  <div class="ax">
+    <div class="hd"><div class="axiom-num">А3</div><b>Аксиома пересечения</b></div>
+    <p>Если две плоскости имеют общую точку, то они пересекаются по прямой, проходящей через эту точку.</p>
+    <p style="margin-top:8px;color:#8ad9ff">💡 Две плоскости не могут пересечься «в одной точке» — только по целой прямой.</p>
+  </div>
+
+  <h2 style="margin:34px 0 14px">Следствия из аксиом</h2>
+
+  <details>
+    <summary>1️⃣ Через прямую и не лежащую на ней точку проходит плоскость, и притом только одна</summary>
+    <div class="body">
+      Возьмём на прямой две точки и добавим данную точку — получим три точки, не лежащие на одной прямой.
+      По аксиоме А1 через них проходит единственная плоскость. По аксиоме А2 вся прямая лежит в ней. <strong>Ч.Т.Д.</strong>
+    </div>
+  </details>
+
+  <details>
+    <summary>2️⃣ Через две пересекающиеся прямые проходит плоскость, и притом только одна</summary>
+    <div class="body">
+      Возьмём точку пересечения и по одной точке на каждой прямой — три точки не лежат на одной прямой.
+      По А1 существует единственная плоскость через них, а по А2 обе прямые целиком в ней лежат. <strong>Ч.Т.Д.</strong>
+    </div>
+  </details>
+
+  <details>
+    <summary>3️⃣ Через две параллельные прямые проходит плоскость, и притом только одна</summary>
+    <div class="body">
+      Параллельные прямые лежат в одной плоскости по определению, а единственность следует из следствия 1. <strong>Ч.Т.Д.</strong>
+    </div>
+  </details>
+
+  <h2 style="margin:34px 0 14px">Аксиомы планиметрии (напоминание)</h2>
+  <div class="grid">
+    <div class="card"><span class="ico">📏</span><h3>Прямая</h3><p>Через любые две точки проходит прямая, и притом только одна.</p></div>
+    <div class="card"><span class="ico">✂️</span><h3>Отрезок</h3><p>На любой прямой можно отложить отрезок любой длины в обе стороны от точки.</p></div>
+    <div class="card"><span class="ico">📐</span><h3>Угол</h3><p>От любой полупрямой в заданную полуплоскость можно отложить угол заданной величины.</p></div>
+    <div class="card"><span class="ico">∥</span><h3>Параллельные</h3><p>Через точку, не лежащую на прямой, проходит только одна прямая, параллельная данной.</p></div>
+  </div>
+</section>
+
+<!-- ================= ТЕОРЕМЫ ================= -->
+<section class="page" id="theorems">
+  <div class="sec-head">
+    <div class="chip">🎯 ключевые</div>
+    <h2>Теоремы <span class="grad">с доказательствами</span></h2>
+    <p class="lead">Открывай карточку — и читай доказательство шаг за шагом. Как прохождение уровней.</p>
+  </div>
+
+  <h3 style="margin:22px 0 12px;color:var(--a2)">🧊 Стереометрия</h3>
+
+  <details>
+    <summary>🔹 Признак параллельности прямой и плоскости</summary>
+    <div class="body">
+      <p><strong>Теорема.</strong> Если прямая, не лежащая в плоскости, параллельна какой-нибудь прямой, лежащей в этой плоскости, то она параллельна самой плоскости.</p>
+      <p style="margin-top:12px"><strong>Доказательство.</strong> Пусть прямая a не лежит в плоскости α, а прямая b лежит в α, причём a ∥ b.</p>
+      <p>Предположим, что a пересекает α в некоторой точке M. Так как a ∥ b, точка M не лежит на b.</p>
+      <p>Через прямую b и точку M проведём плоскость β. Она пересекает α по прямой b (так как обе плоскости содержат b).</p>
+      <p>Но тогда в плоскости β через точку M проходят две прямые a и b, параллельные друг другу, — а через точку, не лежащую на прямой, проходит только одна прямая, параллельная данной. Противоречие.</p>
+      <p>Значит, a не пересекает α, то есть a ∥ α. <strong>Ч.Т.Д.</strong></p>
+    </div>
+  </details>
+
+  <details>
+    <summary>🔹 Признак скрещивающихся прямых</summary>
+    <div class="body">
+      <p><strong>Теорема.</strong> Если одна из двух прямых лежит в некоторой плоскости, а другая пересекает эту плоскость в точке, не лежащей на первой прямой, то эти прямые скрещиваются.</p>
+      <p style="margin-top:12px"><strong>Доказательство.</strong> Пусть прямая AB лежит в плоскости α, а прямая CD пересекает α в точке C, не лежащей на AB.</p>
+      <p>Допустим, что AB и CD лежат в некоторой плоскости β. Тогда плоскость β содержит прямую AB и точку C. Но через прямую и не лежащую на ней точку проходит единственная плоскость — значит, β совпадает с α.</p>
+      <p>Тогда прямая CD лежала бы целиком в α, но она пересекает α только в точке C. Противоречие. Значит, прямые скрещиваются. <strong>Ч.Т.Д.</strong></p>
+    </div>
+  </details>
+
+  <details>
+    <summary>🔹 Признак перпендикулярности прямой и плоскости</summary>
+    <div class="body">
+      <p><strong>Теорема.</strong> Если прямая перпендикулярна двум пересекающимся прямым, лежащим в плоскости, то она перпендикулярна этой плоскости.</p>
+      <p style="margin-top:12px"><strong>Идея доказательства.</strong> Пусть a ⊥ b и a ⊥ c, где b и c пересекаются в точке O и лежат в α. Проводим через O произвольную прямую x в плоскости α и доказываем, что a ⊥ x.</p>
+      <p>Откладываем на a равные отрезки AO = OA₁, на прямой x — точки B и C так, чтобы OB = OC. Тогда треугольники ABO и A₁BO равны по двум сторонам и углу, аналогично ACO и A₁CO.</p>
+      <p>Отсюда AB = A₁B и AC = A₁C, значит, треугольники ABC и A₁BC равны по трём сторонам, и медиана AO в треугольнике ABA₁... — далее получаем, что a ⊥ x. Так как x выбрана произвольно, a перпендикулярна любой прямой плоскости α. <strong>Ч.Т.Д.</strong></p>
+    </div>
+  </details>
+
+  <details>
+    <summary>🔹 Теорема о трёх перпендикулярах</summary>
+    <div class="body">
+      <p><strong>Теорема.</strong> Прямая, проведённая в плоскости через основание наклонной, перпендикулярна наклонной тогда и только тогда, когда она перпендикулярна её проекции.</p>
+      <p style="margin-top:12px"><strong>Доказательство (прямое утверждение).</strong> Пусть AH ⊥ α, AM — наклонная, HM — её проекция. Прямая l лежит в α, проходит через M и l ⊥ HM.</p>
+      <p>Так как AH ⊥ α, то AH ⊥ l. Значит, l перпендикулярна двум пересекающимся прямым AH и HM плоскости AHM, следовательно, l ⊥ плоскости AHM.</p>
+      <p>Тогда l перпендикулярна любой прямой этой плоскости, в том числе AM. <strong>Ч.Т.Д.</strong></p>
+      <p style="margin-top:10px">Обратное утверждение доказывается аналогично.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>🔹 Теорема о площади ортогональной проекции</summary>
+    <div class="body">
+      <p><strong>Теорема.</strong> Площадь ортогональной проекции многоугольника на плоскость равна произведению его площади на косинус угла между плоскостью многоугольника и плоскостью проекции.</p>
+      <p style="margin-top:12px"><span class="formula">S_проекции = S · cos φ</span></p>
+      <p style="margin-top:10px"><strong>Идея:</strong> доказывается сначала для треугольника, затем для любого многоугольника разбиением на треугольники.</p>
+    </div>
+  </details>
+
+  <h3 style="margin:28px 0 12px;color:var(--a2)">📏 Планиметрия</h3>
+
+  <details>
+    <summary>🔹 Теорема косинусов</summary>
+    <div class="body">
+      <p><strong>Теорема.</strong> Квадрат стороны треугольника равен сумме квадратов двух других сторон минус удвоенное произведение этих сторон на косинус угла между ними.</p>
+      <p style="margin-top:10px"><span class="formula">c² = a² + b² − 2ab·cos C</span></p>
+      <p style="margin-top:10px"><strong>Следствие (теорема Пифагора):</strong> при C = 90° получаем <span class="formula">c² = a² + b²</span></p>
+    </div>
+  </details>
+
+  <details>
+    <summary>🔹 Теорема о вписанном угле</summary>
+    <div class="body">
+      <p><strong>Теорема.</strong> Вписанный угол измеряется половиной дуги, на которую он опирается.</p>
+      <p style="margin-top:10px"><strong>Следствия:</strong></p>
+      <p>• Вписанные углы, опирающиеся на одну и ту же дугу, равны.</p>
+      <p>• Вписанный угол, опирающийся на диаметр, прямой.</p>
+      <p>• Вписанный четырёхугольник: сумма противоположных углов равна 180°.</p>
+    </div>
+  </details>
+
+  <details>
+    <summary>🔹 Теорема о сумме углов треугольника</summary>
+    <div class="body">
+      <p><strong>Теорема.</strong> Сумма углов треугольника равна 180°.</p>
+      <p style="margin-top:10px"><strong>Доказательство.</strong> Через вершину B проведём прямую, параллельную стороне AC. Тогда ∠A и ∠C равны соответствующим накрест лежащим углам, а вместе с ∠B они образуют развёрнутый угол 180°. <strong>Ч.Т.Д.</strong></p>
+      <p style="margin-top:10px"><strong>Следствие:</strong> сумма углов выпуклого n-угольника равна 180°·(n − 2).</p>
+    </div>
+  </details>
+</section>
+
+<!-- ================= 3D ================= -->
+<section class="page" id="threed">
+  <div class="sec-head">
+    <div class="chip">🌐 интерактив</div>
+    <h2>3D-демонстрации <span class="grad">объёмных фигур</span></h2>
+    <p class="lead">Крути мышкой, приближай колёсиком. Выбери фигуру слева — и посмотри на неё со всех сторон.</p>
+  </div>
+
+  <div class="viewer">
+    <div class="shape-list" id="shapeList"></div>
+
+    <div>
+      <div class="stage">
+        <canvas id="scene3d"></canvas>
+        <div class="stage-tools">
+          <button class="tool on" id="btnRotate">⟳ Вращение</button>
+          <button class="tool" id="btnEdges">▦ Рёбра</button>
+          <button class="tool" id="btnReset">⟲ Сброс</button>
+        </div>
+        <div class="stage-hint">🖱 зажми и тяни, чтобы вращать</div>
+      </div>
+      <div class="info-box" id="shapeInfo"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ПОВТОРЕНИЕ ================= -->
+<section class="page" id="review">
+  <div class="sec-head">
+    <div class="chip">🔁 весь курс</div>
+    <h2>Повторение <span class="grad">7–11 класс</span></h2>
+    <p class="lead">Отмечай галочками то, что уже повторил. Прогресс сохраняется в браузере.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <b>Твой прогресс</b>
+      <b id="revPercent" style="color:var(--a2)">0%</b>
+    </div>
+    <div class="qbar" style="margin:0"><span id="revBar"></span></div>
+  </div>
+
+  <div id="reviewBox"></div>
+</section>
+
+<!-- ================= ТЕСТ ================= -->
+<section class="page" id="quiz">
+  <div class="sec-head">
+    <div class="chip">🎮 игра</div>
+    <h2>Геометрический <span class="grad">вызов</span></h2>
+    <p class="lead">10 вопросов по всему курсу. Проверь себя — и узнай, где ещё есть пробелы.</p>
+  </div>
+  <div class="quiz-wrap" id="quizBox"></div>
+</section>
+
+</main>
+
+<footer>
+  <b>Геометрия 7–11</b> · интерактивный учебник по мотивам учебника Л.С. Атанасяна и др.<br>
+  Сделано с ❤️ для тех, кто учится. Крути фигуры, решай задачи, не бойся ошибок.
+</footer>
+
+<script>
+/* ================= НАВИГАЦИЯ ================= */
+function go(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.page===id));
+  window.scrollTo({top:0,behavior:'smooth'});
+  if(id==='threed'){ setTimeout(resize3D,80); }
+  if(id==='quiz' && !quizStarted){ startQuiz(); }
+}
+document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
+
+/* подсветка карточек под курсором */
+document.addEventListener('mousemove',e=>{
+  const c = e.target.closest('.card');
+  if(!c) return;
+  const r = c.getBoundingClientRect();
+  c.style.setProperty('--mx',(e.clientX-r.left)+'px');
+  c.style.setProperty('--my',(e.clientY-r.top)+'px');
+});
+
+/* ================= 3D ================= */
+let renderer, scene, camera, group, mesh, container3D, canvas3D;
+let autoRotate = true, showEdges = true, dragging = false, lastX = 0, lastY = 0;
+let velX = 0, velY = 0.006;
+
+const SHAPES = {
+  cube:{ label:'🧊 Куб', title:'Куб',
+    geo:()=>new THREE.BoxGeometry(2,2,2), edges:true,
+    desc:'Правильный многогранник: 6 граней, 12 рёбер, 8 вершин. Все грани — равные квадраты.',
+    f:['V = a³','S = 6a²','d = a√3'] },
+  box:{ label:'📦 Параллелепипед', title:'Прямоугольный параллелепипед',
+    geo:()=>new THREE.BoxGeometry(2.4,1.4,1.7), edges:true,
+    desc:'Шесть граней — прямоугольники, сходящиеся под прямыми углами.',
+    f:['V = abc','S = 2(ab+bc+ac)','d² = a²+b²+c²'] },
+  tetra:{ label:'🔺 Тетраэдр', title:'Тетраэдр',
+    geo:()=>new THREE.TetrahedronGeometry(1.5), edges:true,
+    desc:'Простейший многогранник: 4 треугольные грани, 6 рёбер, 4 вершины.',
+    f:['V = (√2/12)·a³','S = √3·a²'] },
+  pyramid:{ label:'⛰ Пирамида', title:'Четырёхугольная пирамида',
+    geo:()=>new THREE.ConeGeometry(1.5,2.1,4), edges:true,
+    desc:'Основание — квадрат, боковые грани — треугольники, сходящиеся в вершине.',
+    f:['V = ⅓·S_осн·h','S_бок = ½·P_осн·l'] },
+  prism:{ label:'🔷 Призма', title:'Треугольная призма',
+    geo:()=>new THREE.CylinderGeometry(1.3,1.3,2,3), edges:true,
+    desc:'Два равных параллельных треугольника-основания и три прямоугольные боковые грани.',
+    f:['V = S_осн·h','S_бок = P_осн·h'] },
+  octa:{ label:'💎 Октаэдр', title:'Октаэдр',
+    geo:()=>new THREE.OctahedronGeometry(1.5), edges:true,
+    desc:'Правильный многогранник: 8 треугольных граней, 12 рёбер, 6 вершин.',
+    f:['V = (√2/3)·a³','S = 2√3·a²'] },
+  cylinder:{ label:'🥫 Цилиндр', title:'Цилиндр',
+    geo:()=>new THREE.CylinderGeometry(1.2,1.2,2.2,48,1), edges:false,
+    desc:'Тело вращения: получается вращением прямоугольника вокруг одной из сторон.',
+    f:['V = πR²h','S_бок = 2πRh','S_полн = 2πR(R+h)'] },
+  cone:{ label:'🍦 Конус', title:'Конус',
+    geo:()=>new THREE.ConeGeometry(1.35,2.3,48,1), edges:false,
+    desc:'Тело вращения: получается вращением прямоугольного треугольника вокруг катета.',
+    f:['V = ⅓πR²h','S_бок = πRl','l² = R² + h²'] },
+  sphere:{ label:'⚽ Шар', title:'Шар и сфера',
+    geo:()=>new THREE.SphereGeometry(1.4,40,28), edges:false,
+    desc:'Множество точек, равноудалённых от центра. Сфера — поверхность шара.',
+    f:['V = 4/3·πR³','S = 4πR²'] }
+};
+
+function init3D(){
+  canvas3D = document.getElementById('scene3d');
+  container3D = canvas3D.parentElement;
+
+  if(typeof THREE === 'undefined'){
+    container3D.innerHTML = '<div style="display:grid;place-items:center;height:100%;color:#94a3c4;text-align:center;padding:24px">Не удалось загрузить 3D-движок.<br>Проверь подключение к интернету.</div>';
+    return;
+  }
+
+  renderer = new THREE.WebGLRenderer({canvas:canvas3D, antialias:true, alpha:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(45,1,0.1,100);
+  camera.position.set(3.8,3.1,5.4);
+  camera.lookAt(0,0,0);
+
+  scene.add(new THREE.AmbientLight(0xffffff,0.75));
+  const d1 = new THREE.DirectionalLight(0x9b8cff,1.5); d1.position.set(5,7,6); scene.add(d1);
+  const d2 = new THREE.DirectionalLight(0x00d2ff,0.9); d2.position.set(-6,-3,-5); scene.add(d2);
+  const d3 = new THREE.PointLight(0xff6b9d,0.8,20); d3.position.set(0,4,-5); scene.add(d3);
+
+  group = new THREE.Group();
+  scene.add(group);
+
+  buildShape('cube');
+  buildList();
+  bindControls();
+  resize3D();
+  new ResizeObserver(resize3D).observe(container3D);
+  animate3D();
+}
+
+function buildList(){
+  const wrap = document.getElementById('shapeList');
+  wrap.innerHTML = '';
+  Object.keys(SHAPES).forEach(k=>{
+    const b = document.createElement('button');
+    b.className = 'shape-btn' + (k==='cube'?' active':'');
+    b.textContent = SHAPES[k].label;
+    b.onclick = ()=>{
+      document.querySelectorAll('.shape-btn').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      buildShape(k);
+    };
+    wrap.appendChild(b);
+  });
+}
+
+function buildShape(key){
+  if(!group) return;
+  while(group.children.length) {
+    const ch = group.children.pop();
+    if(ch.geometry) ch.geometry.dispose();
+    if(ch.material) ch.material.dispose();
+    if(ch.children) ch.children.forEach(c=>{ if(c.geometry)c.geometry.dispose(); if(c.material)c.material.dispose(); });
+  }
+  const s = SHAPES[key];
+  const geo = s.geo();
+
+  const mat = new THREE.MeshStandardMaterial({
+    color:0x7b6cf6, metalness:0.35, roughness:0.25,
+    transparent:true, opacity:0.93
+  });
+  mesh = new THREE.Mesh(geo, mat);
+  group.add(mesh);
+
+  let lineGeo, lineMat;
+  if(s.edges && THREE.EdgesGeometry){
+    lineGeo = new THREE.EdgesGeometry(geo, 18);
+    lineMat = new THREE.LineBasicMaterial({color:0x00e8ff});
+  } else {
+    lineGeo = new THREE.WireframeGeometry(geo);
+    lineMat = new THREE.LineBasicMaterial({color:0x00e8ff, transparent:true, opacity:showEdges?0.16:0});
+  }
+  const lines = new THREE.LineSegments(lineGeo, lineMat);
+  lines.userData.isEdges = true;
+  mesh.add(lines);
+
+  // подсветка градиентом через вторую сетку
+  group.rotation.set(0,0,0);
+  velX = 0; velY = 0.006;
+
+  const info = document.getElementById('shapeInfo');
+  info.innerHTML = '<h3>' + s.title + '</h3><p>' + s.desc + '</p><div style="margin-top:12px">' +
+    s.f.map(f=>'<span class="formula">'+f+'</span>').join('') + '</div>';
+  info.style.animation='none'; void info.offsetWidth; info.style.animation='';
+}
+
+function bindControls(){
+  const el = canvas3D;
+  const down = (x,y)=>{ dragging=true; lastX=x; lastY=y; };
+  const move = (x,y)=>{
+    if(!dragging) return;
+    const dx = x-lastX, dy = y-lastY;
+    lastX=x; lastY=y;
+    group.rotation.y += dx*0.008;
+    group.rotation.x += dy*0.008;
+    group.rotation.x = Math.max(-1.4, Math.min(1.4, group.rotation.x));
+    velY = dx*0.0016;
+    velX = dy*0.0016;
+  };
+  const up = ()=>{ dragging=false; };
+
+  el.addEventListener('mousedown', e=>down(e.clientX,e.clientY));
+  window.addEventListener('mousemove', e=>move(e.clientX,e.clientY));
+  window.addEventListener('mouseup', up);
+
+  el.addEventListener('touchstart', e=>{ const t=e.touches[0]; down(t.clientX,t.clientY); }, {passive:true});
+  el.addEventListener('touchmove', e=>{ const t=e.touches[0]; move(t.clientX,t.clientY); e.preventDefault(); }, {passive:false});
+  el.addEventListener('touchend', up);
+
+  document.getElementById('btnRotate').onclick = function(){
+    autoRotate = !autoRotate;
+    this.classList.toggle('on', autoRotate);
+  };
+  document.getElementById('btnEdges').onclick = function(){
+    showEdges = !showEdges;
+    this.classList.toggle('on', showEdges);
+    group.traverse(o=>{ if(o.userData && o.userData.isEdges) o.material.opacity = showEdges?1:0.12; });
+  };
+  document.getElementById('btnReset').onclick = ()=>{
+    group.rotation.set(0,0,0); velX=0; velY=0.006;
+  };
+}
+
+function resize3D(){
+  if(!renderer || !container3D) return;
+  const w = container3D.clientWidth, h = container3D.clientHeight;
+  if(!w || !h) return;
+  renderer.setSize(w,h,false);
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
+}
+
+function animate3D(){
+  requestAnimationFrame(animate3D);
+  if(!group) return;
+  if(!dragging){
+    group.rotation.y += velY;
+    group.rotation.x += velX;
+    group.rotation.x = Math.max(-1.4, Math.min(1.4, group.rotation.x));
+    velX *= 0.94;
+    velY += (0.006 - velY)*0.03;
+  }
+  renderer.render(scene, camera);
+}
+window.addEventListener('load', init3D);
+
+/* ================= ПОВТОРЕНИЕ ================= */
+const REVIEW = {
+  '7 класс':[
+    'Начальные геометрические сведения: точка, прямая, отрезок, луч, угол',
+    'Смежные и вертикальные углы, их свойства',
+    'Признаки равенства треугольников (3 признака)',
+    'Медианы, биссектрисы и высоты треугольника',
+    'Равнобедренный треугольник и его свойства',
+    'Параллельные прямые, признаки параллельности',
+    'Сумма углов треугольника, внешний угол',
+    'Прямоугольный треугольник, признаки равенства'
+  ],
+  '8 класс':[
+    'Многоугольники, выпуклый многоугольник',
+    'Параллелограмм, трапеция и их свойства',
+    'Прямоугольник, ромб, квадрат',
+    'Площадь многоугольника: формулы площадей',
+    'Теорема Пифагора и обратная теорема',
+    'Подобные треугольники, признаки подобия',
+    'Синус, косинус, тангенс острого угла',
+    'Окружность: касательная, вписанные углы, хорды'
+  ],
+  '9 класс':[
+    'Векторы: сложение, вычитание, умножение на число',
+    'Координаты вектора, скалярное произведение',
+    'Уравнение окружности и прямой',
+    'Соотношения в треугольнике: теоремы синусов и косинусов',
+    'Длина окружности и площадь круга, сектор',
+    'Движения: симметрия, поворот, параллельный перенос',
+    'Понятие о подобии и гомотетии'
+  ],
+  '10 класс':[
+    'Аксиомы стереометрии А1, А2, А3 и следствия',
+    'Параллельность прямых, прямой и плоскости',
+    'Скрещивающиеся прямые, угол между прямыми',
+    'Параллельность плоскостей, свойства',
+    'Перпендикулярность прямой и плоскости',
+    'Теорема о трёх перпендикулярах',
+    'Угол между прямой и плоскостью, перпендикуляр и наклонная',
+    'Многогранники: призма, пирамида, правильные многогранники'
+  ],
+  '11 класс':[
+    'Векторы и координаты в пространстве',
+    'Скалярное произведение векторов в пространстве',
+    'Движения в пространстве, симметрии',
+    'Цилиндр, конус, усечённый конус',
+    'Сфера и шар, сечение шара плоскостью',
+    'Объём прямоугольного параллелепипеда и призмы',
+    'Объём пирамиды, конуса, цилиндра, шара',
+    'Площадь поверхности: сфера, цилиндр, конус'
+  ]
+};
+
+function buildReview(){
+  const box = document.getElementById('reviewBox');
+  const saved = JSON.parse(localStorage.getItem('geo_review') || '{}');
+  box.innerHTML = '';
+  Object.keys(REVIEW).forEach(cls=>{
+    const d = document.createElement('details');
+    d.innerHTML = '<summary>📘 ' + cls + '</summary><div class="body"></div>';
+    const body = d.querySelector('.body');
+    REVIEW[cls].forEach((item,i)=>{
+      const id = cls+'_'+i;
+      const lab = document.createElement('label');
+      lab.className = 'rev-check' + (saved[id]?' done':'');
+      lab.innerHTML = '<input type="checkbox" ' + (saved[id]?'checked':'') + '><span>' + item + '</span>';
+      lab.querySelector('input').addEventListener('change', function(){
+        const s = JSON.parse(localStorage.getItem('geo_review') || '{}');
+        s[id] = this.checked;
+        localStorage.setItem('geo_review', JSON.stringify(s));
+        lab.classList.toggle('done', this.checked);
+        updateReviewProgress();
+      });
+      body.appendChild(lab);
+    });
+    box.appendChild(d);
+  });
+  updateReviewProgress();
+}
+
+function updateReviewProgress(){
+  const s = JSON.parse(localStorage.getItem('geo_review') || '{}');
+  let total = 0, done = 0;
+  Object.keys(REVIEW).forEach(c=>{
+    REVIEW[c].forEach((_,i)=>{ total++; if(s[c+'_'+i]) done++; });
+  });
+  const pct = total ? Math.round(done/total*100) : 0;
+  document.getElementById('revPercent').textContent = pct + '%';
+  document.getElementById('revBar').style.width = pct + '%';
+}
+buildReview();
+
+/* ================= ТЕСТ ================= */
+const QUIZ = [
+  { q:'Сколько плоскостей можно провести через три точки, не лежащие на одной прямой?',
+    a:['Одну','Две','Три','Бесконечно много'], c:0,
+    e:'Аксиома А1: через любые три точки, не лежащие на одной прямой, проходит плоскость, и притом только одна.' },
+  { q:'Если две точки прямой лежат в плоскости, то…',
+    a:['в плоскости лежит только отрезок между ними','вся прямая лежит в этой плоскости','прямая перпендикулярна плоскости','прямая параллельна плоскости'], c:1,
+    e:'Это аксиома А2. Прямая «приклеена» к плоскости, если две её точки на ней.' },
+  { q:'Скрещивающиеся прямые — это прямые, которые…',
+    a:['пересекаются под прямым углом','не пересекаются и лежат в одной плоскости','не лежат в одной плоскости','совпадают'], c:2,
+    e:'Скрещивающиеся прямые не лежат ни в какой общей плоскости — они не пересекаются и не параллельны.' },
+  { q:'Прямая a не лежит в плоскости α и параллельна прямой b, лежащей в α. Тогда…',
+    a:['a пересекает α','a параллельна α','a лежит в α','a перпендикулярна α'], c:1,
+    e:'Это признак параллельности прямой и плоскости.' },
+  { q:'Теорема о трёх перпендикулярах связывает…',
+    a:['три параллельные прямые','наклонную, её проекцию и прямую в плоскости','три плоскости','три угла треугольника'], c:1,
+    e:'Прямая в плоскости перпендикулярна наклонной ⇔ она перпендикулярна её проекции.' },
+  { q:'Чему равен объём пирамиды?',
+    a:['S·h','⅓·S·h','½·S·h','⅔·S·h'], c:1,
+    e:'V = ⅓·S_осн·h — пирамида занимает ровно треть объёма призмы с тем же основанием и высотой.' },
+  { q:'Площадь поверхности сферы радиуса R равна:',
+    a:['πR²','2πR²','4πR²','4/3·πR³'], c:2,
+    e:'S = 4πR². Кстати, это ровно в 4 раза больше площади большого круга.' },
+  { q:'Сколько рёбер у куба?',
+    a:['6','8','12','16'], c:2,
+    e:'6 граней, 8 вершин, 12 рёбер. Проверь по формуле Эйлера: 8 − 12 + 6 = 2.' },
+  { q:'Сколько существует правильных многогранников?',
+    a:['3','4','5','6'], c:2,
+    e:'Ровно пять: тетраэдр, куб, октаэдр, додекаэдр и икосаэдр.' },
+  { q:'Чему равен вписанный угол, опирающийся на диаметр?',
+    a:['45°','60°','90°','180°'], c:2,
+    e:'Он опирается на дугу в 180°, значит, равен её половине — 90°.' }
+];
+
+let qi = 0, score = 0, quizStarted = false, locked = false;
+
+function startQuiz(){ quizStarted = true; qi = 0; score = 0; renderQ(); }
+
+function renderQ(){
+  const box = document.getElementById('quizBox');
+  if(qi >= QUIZ.length){ renderResult(); return; }
+  const q = QUIZ[qi];
+  locked = false;
+
+  box.innerHTML =
+    '<div class="qmeta"><span>Вопрос ' + (qi+1) + ' из ' + QUIZ.length + '</span><span>Счёт: ' + score + '</span></div>' +
+    '<div class="qbar"><span style="width:' + (qi/QUIZ.length*100) + '%"></span></div>' +
+    '<div class="qtext">' + q.q + '</div>' +
+    '<div class="opts" id="opts"></div>' +
+    '<div id="explainBox"></div>';
+
+  const opts = document.getElementById('opts');
+  const letters = ['А','Б','В','Г'];
+  q.a.forEach((txt,i)=>{
+    const b = document.createElement('button');
+    b.className = 'opt';
+    b.innerHTML = '<span class="letter">' + letters[i] + '</span><span>' + txt + '</span>';
+    b.onclick = ()=>answer(i, b);
+    opts.appendChild(b);
+  });
+}
+
+function answer(i, btn){
+  if(locked) return;
+  locked = true;
+  const q = QUIZ[qi];
+  const all = document.querySelectorAll('.opt');
+  all.forEach(o=>o.classList.add('locked'));
+
+  if(i === q.c){
+    btn.classList.add('correct');
+    score++;
+  } else {
+    btn.classList.add('wrong');
+    all[q.c].classList.add('correct');
+  }
+
+  const ex = document.getElementById('explainBox');
+  ex.innerHTML = '<div class="explain"><b>' + (i===q.c ? '✅ Верно! ' : '❌ Не совсем. ') + '</b>' + q.e + '</div>';
+
+  const next = document.createElement('button');
+  next.className = 'btn btn-p';
+  next.style.marginTop = '18px';
+  next.textContent = (qi === QUIZ.length-1) ? 'Показать результат →' : 'Следующий вопрос →';
+  next.onclick = ()=>{ qi++; renderQ(); };
+  ex.appendChild(next);
+}
+
+function renderResult(){
+  const box = document.getElementById('quizBox');
+  const pct = Math.round(score/QUIZ.length*100);
+  let emoji, msg, color;
+  if(pct === 100){ emoji='🏆'; msg='Идеально! Ты настоящий геометр.'; color='#ffd166'; }
+  else if(pct >= 70){ emoji='🎉'; msg='Отличный результат! Ещё чуть-чуть до максимума.'; color='#22c55e'; }
+  else if(pct >= 40){ emoji='💪'; msg='Неплохо! Загляни в разделы «Теоремы» и «Аксиомы».'; color='#00d2ff'; }
+  else { emoji='📚'; msg='Есть куда расти. Начни с раздела «Повторение 7–11».'; color='#ff6b9d'; }
+
+  box.innerHTML =
+    '<div class="result">' +
+      '<div style="font-size:4rem;margin-bottom:6px">' + emoji + '</div>' +
+      '<div class="big" style="color:' + color + '">' + score + ' / ' + QUIZ.length + '</div>' +
+      '<p style="color:var(--muted);margin:10px 0 24px;font-size:1.05rem">' + msg + '</p>' +
+      '<button class="btn btn-p" onclick="startQuiz()">🔄 Пройти заново</button>' +
+      '<button class="btn btn-g" onclick="go(\'theorems\')" style="margin-left:10px">📖 К теоремам</button>' +
+    '</div>';
+}
+</script>
+</body>
+</html>
