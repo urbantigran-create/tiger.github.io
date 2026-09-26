@@ -1,0 +1,2565 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Космос 3D — Тигран Урбан</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; overflow:hidden; background:#000; color:#fff;
+         font-family: system-ui, sans-serif; }
+  canvas { display:block; }
+  #menu { position:fixed; top:8px; left:50%; transform:translateX(-50%);
+          display:flex; gap:4px; flex-wrap:wrap; justify-content:center;
+          z-index:10; max-width:98vw; }
+  #menu button { padding:6px 11px; border-radius:16px;
+                 border:1px solid rgba(120,160,240,0.5);
+                 background:rgba(10,20,40,0.75); color:#fff; cursor:pointer;
+                 font-size:11.5px; transition:.2s; backdrop-filter:blur(10px); }
+  #menu button:hover { background:rgba(70,110,200,0.9); transform:translateY(-2px); }
+  #menu button.active { background:#4466aa; box-shadow:0 0 20px #6688cc; }
+  #title { position:fixed; top:56px; left:50%; transform:translateX(-50%);
+           font-size:22px; font-weight:800; letter-spacing:2px; text-align:center;
+           background:linear-gradient(180deg,#fff,#88aaff);
+           -webkit-background-clip:text; background-clip:text;
+           -webkit-text-fill-color:transparent; color:transparent;
+           text-shadow:0 0 30px #4466aa; z-index:9; pointer-events:none; }
+  #info { position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+          background:rgba(0,0,0,0.78); padding:13px 24px; border-radius:22px;
+          max-width:80vw; text-align:center; font-size:14px; line-height:1.5;
+          border:1px solid rgba(100,140,220,0.4); z-index:9;
+          backdrop-filter:blur(12px); box-shadow:0 4px 30px rgba(60,100,200,0.25); }
+  #big-text { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+              font-size:80px; font-weight:900; letter-spacing:10px;
+              background:linear-gradient(180deg,#fff,#aaccff);
+              -webkit-background-clip:text; background-clip:text;
+              -webkit-text-fill-color:transparent; color:transparent;
+              text-shadow:0 0 60px #4488ff; z-index:8; opacity:0; transition:1s; }
+  #loading { position:fixed; inset:0; background:#000; z-index:100;
+             display:flex; align-items:center; justify-content:center;
+             flex-direction:column; font-size:20px; color:#88aaff;
+             letter-spacing:4px; transition:.6s; }
+  #load-status { font-size:12px; opacity:0.6; margin-top:16px; letter-spacing:2px;
+                 max-width:80vw; text-align:center; }
+  #load-error { font-size:13px; color:#ff6666; margin-top:20px; letter-spacing:1px;
+                max-width:80vw; text-align:center; white-space:pre-wrap; }
+  #hint { position:fixed; bottom:4px; right:12px; font-size:10.5px;
+          opacity:0.45; z-index:9; }
+</style>
+</head>
+<body>
+<div id="loading">
+  ЗАГРУЗКА…
+  <div id="load-status">старт</div>
+  <div id="load-error"></div>
+</div>
+<div id="menu"></div>
+<div id="title"></div>
+<div id="info"></div>
+<div id="big-text"></div>
+<div id="hint">мышь · колесо · ПКМ · 1–9 0 Q W E R T Y U I O P A S D F G H * — сцены</div>
+
+<script>
+  window.$el = function(id, tag){
+    let el = document.getElementById(id);
+    if (!el){ el = document.createElement(tag || 'div'); el.id = id; document.body.appendChild(el); }
+    return el;
+  };
+  window.setText = function(el, t){ if (el) el.textContent = t; };
+  window.__progress = function(msg){
+    setText($el('load-status'), msg);
+    console.log('[progress]', msg);
+  };
+  window.__error = function(msg){
+    setText($el('load-error'), 'ОШИБКА: ' + msg);
+    console.error('[FATAL]', msg);
+  };
+  window.addEventListener('error', e => {
+    window.__error((e.message || '?') + (e.filename ? '\n' + e.filename.split('/').pop() + ':' + e.lineno : ''));
+  });
+  window.addEventListener('unhandledrejection', e => {
+    window.__error('Promise: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+  });
+</script>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+window.__progress('загрузка three.js…');
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+window.__progress('модули загружены, инициализация…');
+
+/* =========================================================
+   БАЗА
+========================================================= */
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 100000);
+camera.position.set(0, 25, 70);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.055;
+controls.minDistance = 1.5;
+controls.maxDistance = 8000;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+const sunLight = new THREE.PointLight(0xfff2d8, 4.5, 0, 0);
+scene.add(sunLight);
+const rimLight = new THREE.DirectionalLight(0x6688cc, 0.3);
+rimLight.position.set(-1, 0.5, -1);
+scene.add(rimLight);
+
+/* =========================================================
+   POST-PROCESSING
+========================================================= */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(innerWidth, innerHeight), 0.65, 0.55, 0.5);
+composer.addPass(bloomPass);
+
+const LensingShader = {
+  uniforms: {
+    tDiffuse: { value: null }, uCenter: { value: new THREE.Vector2(0.5, 0.5) },
+    uStrength: { value: 0.0 }, uRadius: { value: 0.1 }, uTime: { value: 0 }
+  },
+  vertexShader: `varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform vec2 uCenter;
+    uniform float uStrength, uRadius, uTime;
+    varying vec2 vUv;
+    void main(){
+      vec2 uv = vUv;
+      if (uStrength > 0.001){
+        float aspect = 1.6;
+        vec2 d = uv - uCenter; d.x *= aspect;
+        float r = length(d);
+        float inf = uRadius / max(r, 0.001);
+        inf = smoothstep(uRadius*1.8, uRadius*0.3, r) * inf;
+        vec2 dir = normalize(d + 0.0001);
+        vec2 w = uv - dir * (inf * uStrength * 0.15);
+        float ang = inf * uStrength * 1.2;
+        mat2 rot = mat2(cos(ang), -sin(ang), sin(ang), cos(ang));
+        vec2 c = w - uCenter; c.x *= aspect; c = rot * c; c.x /= aspect;
+        w = c + uCenter;
+        vec3 col = texture2D(tDiffuse, w).rgb;
+        float eR = uRadius * 0.95;
+        float ring = exp(-abs(r - eR) * 60.0) * uStrength;
+        col += vec3(1.0, 0.85, 0.6) * ring * 1.5;
+        col *= mix(1.0, 0.15, smoothstep(uRadius*0.55, uRadius*0.4, r));
+        gl_FragColor = vec4(col, 1.0);
+      } else { gl_FragColor = texture2D(tDiffuse, uv); }
+    }`
+};
+const lensingPass = new ShaderPass(LensingShader);
+lensingPass.uniforms.uStrength.value = 0;
+composer.addPass(lensingPass);
+
+const PostFxShader = {
+  uniforms: {
+    tDiffuse: { value: null }, uTime: { value: 0 },
+    uChroma: { value: 0.0022 }, uVignette: { value: 0.55 }, uGrain: { value: 0.025 },
+    uResolution: { value: new THREE.Vector2(innerWidth, innerHeight) }
+  },
+  vertexShader: `varying vec2 vUv;
+    void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uTime, uChroma, uVignette, uGrain;
+    uniform vec2 uResolution;
+    varying vec2 vUv;
+    float rand(vec2 co){ return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main(){
+      vec2 uv = vUv;
+      vec2 center = vec2(0.5);
+      vec2 dir = uv - center;
+      float dist = length(dir);
+      float amount = uChroma * dist * dist * 3.0;
+      vec3 col;
+      col.r = texture2D(tDiffuse, uv - dir * amount).r;
+      col.g = texture2D(tDiffuse, uv).g;
+      col.b = texture2D(tDiffuse, uv + dir * amount).b;
+      float vig = 1.0 - smoothstep(0.35, 0.95, dist);
+      col *= mix(1.0 - uVignette, 1.0, vig);
+      float g = rand(uv * uResolution + uTime) - 0.5;
+      col += g * uGrain;
+      gl_FragColor = vec4(col, 1.0);
+    }`
+};
+const postFxPass = new ShaderPass(PostFxShader);
+composer.addPass(postFxPass);
+composer.addPass(new OutputPass());
+
+/* =========================================================
+   ШУМ
+========================================================= */
+const GLSL_NOISE = `
+vec3 mod289(vec3 x){ return x - floor(x*(1.0/289.0))*289.0; }
+vec4 mod289(vec4 x){ return x - floor(x*(1.0/289.0))*289.0; }
+vec4 permute(vec4 x){ return mod289(((x*34.0)+1.0)*x); }
+vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
+float snoise(vec3 v){
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + C.yyy;
+  vec3 x3 = x0 - D.yyy;
+  i = mod289(i);
+  vec4 p = permute(permute(permute(
+    i.z + vec4(0.0, i1.z, i2.z, 1.0))
+    + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+    + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 0.142857142857;
+  vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_);
+  vec4 x = x_ * ns.x + ns.yyyy;
+  vec4 y = y_ * ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x);
+  vec3 p1 = vec3(a0.zw, h.y);
+  vec3 p2 = vec3(a1.xy, h.z);
+  vec3 p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+  p0*=norm.x; p1*=norm.y; p2*=norm.z; p3*=norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  m = m*m;
+  return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+}
+float fbm(vec3 p){
+  float v = 0.0, a = 0.5;
+  for (int i=0;i<5;i++){ v += a*snoise(p); p *= 2.02; a *= 0.5; }
+  return v;
+}
+`;
+
+/* =========================================================
+   НАСТРОЙКИ
+========================================================= */
+const Q = {
+  sphereSeg: 64,
+  particleScale: 0.7,
+  starCount: 8000,
+  texSize: 256
+};
+
+/* =========================================================
+   ЗАГРУЗКА ТЕКСТУР NASA (не блокирует старт)
+========================================================= */
+const REAL_TEX = {
+  earth: null, earthNormal: null, earthSpecular: null,
+  earthClouds: null, earthLights: null, moon: null
+};
+
+function tryLoadTexture(url, key, isColor){
+  const loader = new THREE.TextureLoader();
+  loader.crossOrigin = 'anonymous';
+  loader.load(url,
+    tex => {
+      if (isColor) tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      REAL_TEX[key] = tex;
+      console.log('[NASA] загружено:', key);
+    },
+    undefined,
+    () => { console.warn('[NASA] не удалось загрузить', key, '— используется процедурный fallback'); }
+  );
+}
+
+const BASE = 'https://unpkg.com/three@0.160.0/examples/textures/planets/';
+tryLoadTexture(BASE + 'earth_atmos_2048.jpg', 'earth', true);
+tryLoadTexture(BASE + 'earth_normal_2048.jpg', 'earthNormal', false);
+tryLoadTexture(BASE + 'earth_specular_2048.jpg', 'earthSpecular', false);
+tryLoadTexture(BASE + 'earth_clouds_1024.png', 'earthClouds', true);
+tryLoadTexture(BASE + 'earth_lights_2048.png', 'earthLights', true);
+tryLoadTexture(BASE + 'moon_1024.jpg', 'moon', true);
+
+/* =========================================================
+   ХЕЛПЕРЫ
+========================================================= */
+const sceneRoot = new THREE.Group();
+scene.add(sceneRoot);
+const updaters = [];
+let currentIdx = -1;
+
+function clearScene(){
+  while (sceneRoot.children.length){
+    const c = sceneRoot.children[0];
+    sceneRoot.remove(c);
+    c.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material){
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach(m => {
+          Object.values(m).forEach(v => {
+            if (v && v.isTexture){
+              const realTextures = [REAL_TEX.earth, REAL_TEX.earthNormal,
+                REAL_TEX.earthSpecular, REAL_TEX.earthClouds,
+                REAL_TEX.earthLights, REAL_TEX.moon].filter(Boolean);
+              if (!realTextures.includes(v)) v.dispose();
+            }
+          });
+          m.dispose();
+        });
+      }
+    });
+  }
+  updaters.length = 0;
+  lensingPass.uniforms.uStrength.value = 0;
+}
+
+function makeGlowTex(inner, outer){
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(64,64,0, 64,64,64);
+  g.addColorStop(0, inner);
+  g.addColorStop(0.2, outer);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,128,128);
+  return new THREE.CanvasTexture(c);
+}
+
+function makeCloudTex(r, g, b){
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const gr = ctx.createRadialGradient(64,64,0, 64,64,64);
+  gr.addColorStop(0, `rgba(${r},${g},${b},1)`);
+  gr.addColorStop(0.4, `rgba(${r},${g},${b},0.5)`);
+  gr.addColorStop(0.8, `rgba(${r},${g},${b},0.1)`);
+  gr.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  ctx.fillStyle = gr; ctx.fillRect(0,0,128,128);
+  return new THREE.CanvasTexture(c);
+}
+
+function makeLabel(text, sub, width=10, color='#ffffff', subColor='#aaccff'){
+  const cv = document.createElement('canvas');
+  cv.width = 1024; cv.height = 256;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = color;
+  ctx.font = 'bold 84px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.shadowColor = '#4488ff'; ctx.shadowBlur = 24;
+  ctx.fillText(text, 512, 110);
+  if (sub){
+    ctx.shadowBlur = 12;
+    ctx.font = '44px system-ui, sans-serif';
+    ctx.fillStyle = subColor;
+    ctx.fillText(sub, 512, 200);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = 4;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, transparent:true, depthTest:false, depthWrite:false }));
+  sp.scale.set(width, width * 0.25, 1);
+  return sp;
+}
+
+function makeStarField(count){
+  const geo = new THREE.BufferGeometry();
+  const pos = [], col = [], sizes = [];
+  const spectral = [
+    { c: [0.62, 0.72, 1.00], w: 0.005 },
+    { c: [0.72, 0.82, 1.00], w: 0.015 },
+    { c: [0.90, 0.95, 1.00], w: 0.06  },
+    { c: [1.00, 0.98, 0.90], w: 0.10  },
+    { c: [1.00, 0.95, 0.75], w: 0.22  },
+    { c: [1.00, 0.85, 0.60], w: 0.30  },
+    { c: [1.00, 0.72, 0.55], w: 0.30  }
+  ];
+  const totalW = spectral.reduce((s, sp) => s + sp.w, 0);
+  function pickColor(){
+    let r = Math.random() * totalW;
+    for (const sp of spectral){ r -= sp.w; if (r <= 0) return sp.c; }
+    return spectral[spectral.length-1].c;
+  }
+  for (let i=0; i<count; i++){
+    const r = 2000 + Math.random()*5000;
+    const t = Math.random()*Math.PI*2;
+    const p = Math.acos(2*Math.random()-1);
+    pos.push(r*Math.sin(p)*Math.cos(t), r*Math.cos(p), r*Math.sin(p)*Math.sin(t));
+    const c = pickColor();
+    col.push(c[0], c[1], c[2]);
+    sizes.push(0.8 + Math.pow(Math.random(), 3) * 4);
+  }
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {},
+    vertexShader: `
+      attribute float size;
+      attribute vec3 color;
+      varying vec3 vColor;
+      void main(){
+        vColor = color;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = size * (200.0 / -mv.z) * 3.0;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      varying vec3 vColor;
+      void main(){
+        vec2 uv = gl_PointCoord - 0.5;
+        float d = length(uv);
+        if (d > 0.5) discard;
+        float alpha = smoothstep(0.5, 0.05, d);
+        gl_FragColor = vec4(vColor * alpha, alpha);
+      }`,
+    transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, vertexColors: true
+  });
+  return new THREE.Points(geo, mat);
+}
+
+function generateHeightmap(size, seed, opts){
+  const cv = document.createElement('canvas');
+  cv.width = size; cv.height = size/2;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(cv.width, cv.height);
+  const d = img.data;
+  const perm = new Uint8Array(512);
+  const basePerm = new Uint8Array(256);
+  for (let i=0; i<256; i++) basePerm[i] = i;
+  let s0 = Math.floor(seed) || 12345;
+  const rand = () => { s0 = (s0 * 1664525 + 1013904223) % 4294967296; return s0 / 4294967296; };
+  for (let i=255; i>0; i--){
+    const j = Math.floor(rand() * (i+1));
+    [basePerm[i], basePerm[j]] = [basePerm[j], basePerm[i]];
+  }
+  for (let i=0; i<512; i++) perm[i] = basePerm[i & 255];
+  const fade = t => t*t*t*(t*(t*6 - 15) + 10);
+  const lerp = (a,b,t) => a + (b-a)*t;
+  const hash = (x,y) => perm[(perm[x & 255] + y) & 255] / 255;
+  const vn = (x,y) => {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const xf = x - xi, yf = y - yi;
+    const u = fade(xf), v = fade(yf);
+    return lerp(lerp(hash(xi,yi), hash(xi+1,yi), u),
+                lerp(hash(xi,yi+1), hash(xi+1,yi+1), u), v);
+  };
+  const fbm2 = (x,y,s) => {
+    let v = 0, amp = 0.5, freq = 1;
+    for (let i=0; i<5; i++){ v += amp * vn(x*freq + s*0.13, y*freq + s*0.07); freq *= 2; amp *= 0.5; }
+    return v;
+  };
+  const strength = opts.strength || 1;
+  for (let y=0; y<cv.height; y++){
+    for (let x=0; x<cv.width; x++){
+      const nx = x / cv.width, ny = y / cv.height;
+      let h = fbm2(nx * 6 * strength, ny * 6 * strength, seed);
+      if (opts.bands){
+        const band = Math.sin(ny * Math.PI * opts.bands) * 0.5 + 0.5;
+        h = h * 0.55 + band * 0.45;
+      }
+      if (opts.poles){
+        const pole = Math.pow(Math.abs(ny - 0.5)*2, 4);
+        h = Math.max(h, pole * 0.85);
+      }
+      const v = Math.floor(Math.max(0, Math.min(1, h)) * 255);
+      const idx = (y * cv.width + x) * 4;
+      d[idx] = d[idx+1] = d[idx+2] = v;
+      d[idx+3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv;
+}
+
+function heightmapToNormal(srcCanvas){
+  const W = srcCanvas.width, H = srcCanvas.height;
+  const src = srcCanvas.getContext('2d').getImageData(0,0,W,H).data;
+  const out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  const outCtx = out.getContext('2d');
+  const img = outCtx.createImageData(W, H);
+  const d = img.data;
+  const get = (x,y) => {
+    x = (x+W)%W; y = (y+H)%H;
+    return src[(y*W + x)*4] / 255;
+  };
+  for (let y=0; y<H; y++){
+    for (let x=0; x<W; x++){
+      const l = get(x-1,y), r = get(x+1,y);
+      const u = get(x,y-1), dn = get(x,y+1);
+      const dx = (r-l)*4, dy = (dn-u)*4;
+      const len = Math.sqrt(dx*dx + dy*dy + 1);
+      const idx = (y*W + x) * 4;
+      d[idx] = ((dx/len)*0.5 + 0.5) * 255;
+      d[idx+1] = ((dy/len)*0.5 + 0.5) * 255;
+      d[idx+2] = ((1/len)*0.5 + 0.5) * 255;
+      d[idx+3] = 255;
+    }
+  }
+  outCtx.putImageData(img, 0, 0);
+  return out;
+}
+
+function makePlanetMaterial(opts){
+  const size = Q.texSize;
+  const heightC = generateHeightmap(size, opts.seed || Math.random()*100, {
+    bands: opts.bands, poles: opts.poles, strength: opts.strength || 1 });
+  const normalC = heightmapToNormal(heightC);
+  const diffC = document.createElement('canvas');
+  diffC.width = heightC.width; diffC.height = heightC.height;
+  const dctx = diffC.getContext('2d');
+  dctx.drawImage(heightC, 0, 0);
+  const dimg = dctx.getImageData(0, 0, diffC.width, diffC.height);
+  const dd = dimg.data;
+  const cA = new THREE.Color(opts.colorA);
+  const cB = new THREE.Color(opts.colorB);
+  for (let i=0; i<dd.length; i+=4){
+    const t = dd[i] / 255;
+    dd[i]   = (cA.r*(1-t) + cB.r*t) * 255;
+    dd[i+1] = (cA.g*(1-t) + cB.g*t) * 255;
+    dd[i+2] = (cA.b*(1-t) + cB.b*t) * 255;
+  }
+  dctx.putImageData(dimg, 0, 0);
+  const diff = new THREE.CanvasTexture(diffC);
+  diff.colorSpace = THREE.SRGBColorSpace;
+  const norm = new THREE.CanvasTexture(normalC);
+  return new THREE.MeshStandardMaterial({
+    map: diff, normalMap: norm,
+    normalScale: new THREE.Vector2(1.4, 1.4),
+    roughness: opts.roughness ?? 0.9,
+    metalness: opts.metalness ?? 0.0
+  });
+}
+
+/* Атмосфера с Fresnel rim */
+function makeAtmosphere(planetRadius, color, intensity){
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(color) },
+      uIntensity: { value: intensity || 1.0 }
+    },
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vView;
+      void main(){
+        vNormal = normalize(normalMatrix * normal);
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vView = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float uIntensity;
+      varying vec3 vNormal;
+      varying vec3 vView;
+      void main(){
+        float rim = 1.0 - abs(dot(normalize(vNormal), normalize(vView)));
+        rim = pow(rim, 3.0);
+        gl_FragColor = vec4(uColor * uIntensity, rim * 0.8);
+      }`,
+    transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, side: THREE.BackSide
+  });
+  return new THREE.Mesh(
+    new THREE.SphereGeometry(planetRadius * 1.08, 48, 48),
+    mat
+  );
+}
+
+/* Кольца */
+function makeRingTexture(){
+  const w = 1024, h = 8;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  for (let x=0; x<w; x++){
+    const t = x / w;
+    let a = 0.55;
+    a += Math.sin(t * 80) * 0.15;
+    a += Math.sin(t * 40 + 1.3) * 0.15;
+    a += Math.sin(t * 150 + 2.7) * 0.1;
+    if (t < 0.06) a *= t / 0.06;
+    if (t > 0.94) a *= (1 - t) / 0.06;
+    if (Math.abs(t - 0.42) < 0.02) a *= 0.1;
+    if (Math.abs(t - 0.72) < 0.015) a *= 0.15;
+    a = Math.max(0, Math.min(1, a));
+    const c = Math.floor(210 + Math.sin(t*60)*20);
+    ctx.fillStyle = `rgba(${c},${c-15},${c-40},${a})`;
+    ctx.fillRect(x, 0, 1, h);
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+function makeSaturnRings(innerR, outerR){
+  const group = new THREE.Group();
+  const tex = makeRingTexture();
+  const ringGeo = new THREE.RingGeometry(innerR, outerR, 128, 1);
+  const pos = ringGeo.attributes.position;
+  const uv = ringGeo.attributes.uv;
+  for (let i=0; i<pos.count; i++){
+    const x = pos.getX(i), y = pos.getY(i);
+    const r = Math.sqrt(x*x + y*y);
+    const t = (r - innerR) / (outerR - innerR);
+    uv.setXY(i, t, 0.5);
+  }
+  uv.needsUpdate = true;
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex, side: THREE.DoubleSide,
+    transparent: true, depthWrite: false, opacity: 0.95
+  });
+  const ring = new THREE.Mesh(ringGeo, mat);
+  ring.rotation.x = -Math.PI/2;
+  group.add(ring);
+  return group;
+}
+
+/* Галактика */
+function makeGalaxy(config){
+  const group = new THREE.Group();
+  const { radius, armCount, starCount, dustCount, cA, cB, cCore } = config;
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(radius * 0.12, 24, 24),
+    new THREE.MeshBasicMaterial({ color: cCore || 0xfff2c0 }));
+  group.add(core);
+  const coreGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex('rgba(255,250,220,1)', 'rgba(255,220,140,0.6)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  coreGlow.scale.set(radius*1.2, radius*1.2, 1);
+  group.add(coreGlow);
+
+  const starPos = [], starCol = [];
+  const A = new THREE.Color(cA), B = new THREE.Color(cB);
+  for (let i=0; i<starCount; i++){
+    const arm = Math.floor(Math.random() * armCount);
+    const r = Math.pow(Math.random(), 0.7) * radius;
+    const armAngle = (arm / armCount) * Math.PI * 2;
+    const angle = armAngle + r * 1.8;
+    const spread = (1 - r/radius) * radius * 0.15 + 0.4;
+    starPos.push(
+      Math.cos(angle)*r + (Math.random()-0.5)*spread,
+      (Math.random()-0.5)*radius*0.06,
+      Math.sin(angle)*r + (Math.random()-0.5)*spread );
+    const c = A.clone().lerp(B, Math.random());
+    starCol.push(c.r, c.g, c.b);
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+  starGeo.setAttribute('color', new THREE.Float32BufferAttribute(starCol, 3));
+  group.add(new THREE.Points(starGeo, new THREE.PointsMaterial({
+    size:0.18, vertexColors:true, transparent:true, opacity:0.95,
+    blending:THREE.AdditiveBlending, sizeAttenuation:true, depthWrite:false })));
+
+  if (dustCount > 0){
+    const dustPos = [], dustCol = [];
+    for (let i=0; i<dustCount; i++){
+      const arm = Math.floor(Math.random() * armCount);
+      const r = Math.pow(Math.random(), 0.6) * radius * 0.95;
+      const armAngle = (arm / armCount) * Math.PI * 2;
+      const angle = armAngle + r * 1.8 + 0.6;
+      const spread = (1 - r/radius) * radius * 0.2 + 0.5;
+      dustPos.push(
+        Math.cos(angle)*r + (Math.random()-0.5)*spread,
+        (Math.random()-0.5)*radius*0.03,
+        Math.sin(angle)*r + (Math.random()-0.5)*spread );
+      const v = 0.15 + Math.random()*0.2;
+      dustCol.push(v, v*0.6, v*0.4);
+    }
+    const dustGeo = new THREE.BufferGeometry();
+    dustGeo.setAttribute('position', new THREE.Float32BufferAttribute(dustPos, 3));
+    dustGeo.setAttribute('color', new THREE.Float32BufferAttribute(dustCol, 3));
+    group.add(new THREE.Points(dustGeo, new THREE.PointsMaterial({
+      size:0.22, vertexColors:true, transparent:true, opacity:0.5,
+      sizeAttenuation:true, depthWrite:false })));
+  }
+  return group;
+}
+
+/* =========================================================
+   1. СОЛНЕЧНАЯ СИСТЕМА
+========================================================= */
+function buildSolar(){
+  window.__progress('сцена 1: Солнечная система…');
+  const g = new THREE.Group();
+
+  // Солнце
+  const sunUniforms = { uTime: { value: 0 } };
+  const sunMat = new THREE.ShaderMaterial({
+    uniforms: sunUniforms,
+    vertexShader: `varying vec3 vPos;
+      void main(){ vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `${GLSL_NOISE}
+      uniform float uTime; varying vec3 vPos;
+      void main(){
+        vec3 p = normalize(vPos);
+        float t = uTime * 0.15;
+        float n1 = fbm(p * 3.5 + vec3(t));
+        float n2 = fbm(p * 8.0 - vec3(t*1.3));
+        float n3 = fbm(p * 20.0 + vec3(t*2.5));
+        float heat = n1*0.4 + n2*0.35 + n3*0.15 + 0.3;
+        float prom = pow(max(0.0, n1 - 0.5), 2.0) * 3.0;
+        vec3 col = mix(vec3(1.0,0.35,0.05), vec3(1.0,0.7,0.2), heat);
+        col = mix(col, vec3(1.0,1.0,0.9), pow(heat, 3.0)*0.9);
+        col = mix(col, vec3(1.0,1.0,1.0), prom * 0.4);
+        gl_FragColor = vec4(col, 1.0);
+      }`
+  });
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(5.5, Q.sphereSeg, Q.sphereSeg), sunMat));
+
+  for (let i=0; i<4; i++){
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeGlowTex('rgba(255,250,220,1)', 'rgba(255,180,60,0.4)'),
+      transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+    const size = 18 + i*8;
+    s.scale.set(size, size, 1);
+    s.userData = { base: size, phase: i*0.7 };
+    g.add(s);
+    updaters.push((t) => {
+      const k = s.userData.base * (1 + Math.sin(t*1.5 + s.userData.phase) * 0.08);
+      s.scale.set(k, k, 1);
+    });
+  }
+  updaters.push((t) => { sunUniforms.uTime.value = t; });
+
+  // Планеты — все с mat (fallback), earth дополнительно опционально
+  const planets = [
+    { d:12, s:0.55, sp:1.6,
+      mat:{ colorA:'#3a3a3a', colorB:'#9a9a9a', seed:1 },
+      atmo:null, tilt:0, rot:0.05 },
+    { d:17, s:0.85, sp:1.15,
+      mat:{ colorA:'#7a4818', colorB:'#f0d098', seed:2, bands:5 },
+      atmo:{c:0xffe0a0, i:0.7}, tilt:0.05, rot:0.02 },
+    { d:23, s:0.9, sp:1.0, moon:true, earth:true,
+      mat:{ colorA:'#1a3a6a', colorB:'#8a6a3a', seed:3, water:true, poles:true },
+      atmo:{c:0x6699ff, i:1.4}, tilt:0.41, rot:0.5 },
+    { d:30, s:0.65, sp:0.8,
+      mat:{ colorA:'#5a2010', colorB:'#d87850', seed:4, poles:true },
+      atmo:{c:0xff8855, i:0.5}, tilt:0.44, rot:0.5 },
+    { d:44, s:2.4, sp:0.42, jupiter:true,
+      mat:{ colorA:'#5a3010', colorB:'#f0d0a0', seed:5, bands:9 },
+      atmo:{c:0xffcc88, i:0.6}, tilt:0.05, rot:1.2 },
+    { d:60, s:2.1, sp:0.32, ring:true, saturn:true,
+      mat:{ colorA:'#c8a878', colorB:'#f0d9b0', seed:6, bands:6 },
+      atmo:{c:0xffddaa, i:0.5}, tilt:0.47, rot:1.2 },
+    { d:76, s:1.5, sp:0.22,
+      mat:{ colorA:'#4a98a8', colorB:'#c8f0f8', seed:7, bands:3 },
+      atmo:{c:0x88ddff, i:0.9}, tilt:1.7, rot:0.6 },
+    { d:90, s:1.4, sp:0.16,
+      mat:{ colorA:'#2a4ac0', colorB:'#7090e0', seed:8, bands:4 },
+      atmo:{c:0x5588ff, i:0.8}, tilt:0.49, rot:0.6 }
+  ];
+
+  planets.forEach(p => {
+    const orbit = new THREE.Mesh(
+      new THREE.RingGeometry(p.d - 0.05, p.d + 0.05, 96),
+      new THREE.MeshBasicMaterial({
+        color:0x5577bb, side:THREE.DoubleSide,
+        transparent:true, opacity:0.22 }));
+    orbit.rotation.x = Math.PI/2;
+    g.add(orbit);
+
+    // Всегда есть fallback. Если earth+загружена текстура — используем её.
+    let mat;
+    if (p.earth && REAL_TEX.earth){
+      mat = new THREE.MeshStandardMaterial({
+        map: REAL_TEX.earth,
+        normalMap: REAL_TEX.earthNormal || undefined,
+        normalScale: new THREE.Vector2(0.7, 0.7),
+        roughnessMap: REAL_TEX.earthSpecular || undefined,
+        roughness: 0.85, metalness: 0.05,
+        emissiveMap: REAL_TEX.earthLights || undefined,
+        emissive: 0xffcc66,
+        emissiveIntensity: REAL_TEX.earthLights ? 0.6 : 0
+      });
+    } else if (p.jupiter){
+      const W=1024, H=512;
+      const cv = document.createElement('canvas'); cv.width=W; cv.height=H;
+      const ctx = cv.getContext('2d');
+      const bands = [
+        ['#c9a882',0.00,0.07],['#e8d9b8',0.07,0.12],['#b8875a',0.12,0.20],
+        ['#e8d9b8',0.20,0.26],['#c9a882',0.26,0.34],['#e8d9b8',0.34,0.42],
+        ['#c9a882',0.42,0.50],['#b8875a',0.50,0.58],['#e8d9b8',0.58,0.66],
+        ['#c9a882',0.66,0.74],['#b8875a',0.74,0.82],['#c9a882',0.82,0.90],
+        ['#e8d9b8',0.90,1.00]
+      ];
+      bands.forEach(([c,y1,y2]) => {
+        ctx.fillStyle = c;
+        ctx.fillRect(0, y1*H, W, (y2-y1)*H);
+      });
+      for (let i=0; i<3000; i++){
+        ctx.fillStyle = `rgba(${Math.random()>0.5?'255,255,255':'80,50,30'},${Math.random()*0.11})`;
+        ctx.beginPath();
+        ctx.ellipse(Math.random()*W, Math.random()*H,
+          20 + Math.random()*100, 4 + Math.random()*16, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+      const sx = W*0.62, sy = H*0.62, srx = W*0.075, sry = H*0.075;
+      const rg = ctx.createRadialGradient(sx, sy, 0, sx, sy, srx);
+      rg.addColorStop(0, '#ff9955'); rg.addColorStop(0.5, '#cc4422'); rg.addColorStop(1, '#8a2211');
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, srx, sry, 0, 0, Math.PI*2);
+      ctx.fill();
+      const tex = new THREE.CanvasTexture(cv);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const nm = heightmapToNormal(cv);
+      const ntex = new THREE.CanvasTexture(nm);
+      mat = new THREE.MeshStandardMaterial({
+        map: tex, normalMap: ntex,
+        normalScale: new THREE.Vector2(0.5, 0.5),
+        roughness: 0.9
+      });
+    } else {
+      mat = makePlanetMaterial(p.mat);
+    }
+
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.s, Q.sphereSeg, Q.sphereSeg), mat);
+    mesh.userData = { angle: Math.random()*Math.PI*2, d:p.d, sp:p.sp, rotSpeed: p.rot || 0.1 };
+    if (p.tilt) mesh.rotation.z = p.tilt;
+    g.add(mesh);
+
+    // Облака Земли — отдельный слой
+    if (p.earth && REAL_TEX.earthClouds){
+      const cloudMat = new THREE.MeshPhongMaterial({
+        map: REAL_TEX.earthClouds,
+        transparent: true, opacity: 0.7, depthWrite: false
+      });
+      const clouds = new THREE.Mesh(
+        new THREE.SphereGeometry(p.s * 1.015, Q.sphereSeg, Q.sphereSeg),
+        cloudMat
+      );
+      mesh.add(clouds);
+      updaters.push((t, dt) => { clouds.rotation.y += dt * 0.08; });
+    }
+
+    if (p.atmo){
+      mesh.add(makeAtmosphere(p.s, p.atmo.c, p.atmo.i));
+    }
+
+    if (p.moon){
+      const moonMat = REAL_TEX.moon
+        ? new THREE.MeshStandardMaterial({ map: REAL_TEX.moon, roughness: 1.0 })
+        : makePlanetMaterial({ colorA:'#404040', colorB:'#c0c0c0', seed:11 });
+      const moon = new THREE.Mesh(new THREE.SphereGeometry(0.22, 32, 32), moonMat);
+      const moonPivot = new THREE.Group();
+      moon.position.set(1.9, 0, 0);
+      moonPivot.add(moon);
+      moonPivot.rotation.z = 0.15;
+      mesh.add(moonPivot);
+      updaters.push((t, dt) => { moonPivot.rotation.y += dt * 1.4; });
+    }
+
+    if (p.ring){
+      const rings = makeSaturnRings(p.s * 1.4, p.s * 2.4);
+      rings.rotation.x = Math.PI/2 + 0.35;
+      rings.rotation.z = 0.1;
+      mesh.add(rings);
+    }
+
+    updaters.push((t, dt) => {
+      mesh.userData.angle += dt * mesh.userData.sp * 0.5;
+      mesh.position.set(
+        Math.cos(mesh.userData.angle)*mesh.userData.d, 0,
+        Math.sin(mesh.userData.angle)*mesh.userData.d );
+      mesh.rotation.y += dt * mesh.userData.rotSpeed;
+    });
+  });
+
+  // Пояс астероидов
+  const astCount = 300;
+  const baseGeo = new THREE.IcosahedronGeometry(0.08, 0);
+  const astMat = new THREE.MeshStandardMaterial({ color: 0x8a7a68, roughness: 1.0, flatShading: true });
+  const astInst = new THREE.InstancedMesh(baseGeo, astMat, astCount);
+  const astData = [];
+  const dummy = new THREE.Object3D();
+  for (let i=0; i<astCount; i++){
+    const r = 34 + Math.random()*7;
+    const a = Math.random() * Math.PI * 2;
+    const y = (Math.random()-0.5) * 1.5;
+    const scale = 0.3 + Math.random()*1.5;
+    astData.push({ r, a, y, speed: 0.15 + Math.random()*0.1, scale,
+      rx: Math.random()*Math.PI, ry: Math.random()*Math.PI });
+  }
+  astInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  g.add(astInst);
+
+  // Комета
+  const comet = new THREE.Group();
+  const cometHead = new THREE.Mesh(
+    new THREE.SphereGeometry(0.15, 16, 16),
+    new THREE.MeshBasicMaterial({ color:0xffffff }));
+  comet.add(cometHead);
+  const cometGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex('rgba(255,255,255,1)', 'rgba(180,220,255,0.5)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  cometGlow.scale.set(1.5, 1.5, 1);
+  comet.add(cometGlow);
+
+  const tailCount = Math.floor(700 * Q.particleScale);
+  const tailGeo = new THREE.BufferGeometry();
+  const tailPos = new Float32Array(tailCount * 3);
+  const tailCol = new Float32Array(tailCount * 3);
+  for (let i=0; i<tailCount; i++){
+    const d = Math.random();
+    tailPos[i*3] = d * 12;
+    tailPos[i*3+1] = (Math.random()-0.5) * (0.5 + d*2);
+    tailPos[i*3+2] = (Math.random()-0.5) * (0.5 + d*2);
+    tailCol[i*3] = 0.6 + d*0.4;
+    tailCol[i*3+1] = 0.8 + d*0.2;
+    tailCol[i*3+2] = 1.0;
+  }
+  tailGeo.setAttribute('position', new THREE.BufferAttribute(tailPos, 3));
+  tailGeo.setAttribute('color', new THREE.BufferAttribute(tailCol, 3));
+  const tail = new THREE.Points(tailGeo, new THREE.PointsMaterial({
+    size:0.1, vertexColors:true, transparent:true, opacity:0.75,
+    blending:THREE.AdditiveBlending, sizeAttenuation:true, depthWrite:false }));
+  comet.add(tail);
+  g.add(comet);
+
+  updaters.push((t, dt) => {
+    for (let i=0; i<astCount; i++){
+      const d = astData[i];
+      d.a += dt * d.speed;
+      dummy.position.set(Math.cos(d.a)*d.r, d.y, Math.sin(d.a)*d.r);
+      dummy.rotation.set(d.rx + t*0.5, d.ry + t*0.3, 0);
+      dummy.scale.setScalar(d.scale);
+      dummy.updateMatrix();
+      astInst.setMatrixAt(i, dummy.matrix);
+    }
+    astInst.instanceMatrix.needsUpdate = true;
+
+    const cx = Math.cos(t*0.15) * 55;
+    const cz = Math.sin(t*0.15) * 55;
+    comet.position.set(cx, 3, cz);
+    const dir = new THREE.Vector3(-cx, 0, -cz).normalize();
+    comet.lookAt(comet.position.clone().add(dir.multiplyScalar(-100)));
+    tail.rotation.y = Math.PI;
+  });
+
+  return g;
+}
+
+/* =========================================================
+   2. КЛАСТЕР ГАЛАКТИК
+========================================================= */
+function buildGalaxyCluster(){
+  const g = new THREE.Group();
+  const palettes = [
+    { cA:'#ffe0c0', cB:'#cc88ff' },
+    { cA:'#cce0ff', cB:'#88aaff' },
+    { cA:'#ffddaa', cB:'#ff8866' },
+    { cA:'#ddaaff', cB:'#aa88ff' },
+    { cA:'#aaccff', cB:'#6688ee' },
+    { cA:'#ffe8d0', cB:'#ddaa88' }
+  ];
+  for (let i=0; i<16; i++){
+    const p = palettes[i % palettes.length];
+    const gal = makeGalaxy({
+      radius: 5 + Math.random()*4, armCount: 2,
+      starCount: Math.floor(2500 * Q.particleScale),
+      dustCount: Math.floor(500 * Q.particleScale),
+      cA: p.cA, cB: p.cB });
+    const theta = Math.random()*Math.PI*2;
+    const phi = Math.acos(2*Math.random()-1);
+    const R = 35 + Math.random()*80;
+    gal.position.set(
+      R*Math.sin(phi)*Math.cos(theta),
+      R*Math.cos(phi)*0.65,
+      R*Math.sin(phi)*Math.sin(theta));
+    gal.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
+    gal.userData.spin = (Math.random()-0.5) * 0.15;
+    g.add(gal);
+    updaters.push((t, dt) => { gal.rotation.y += gal.userData.spin * dt; });
+  }
+  return g;
+}
+
+/* =========================================================
+   3. КОСМИЧЕСКАЯ ПАУТИНА
+========================================================= */
+function buildBigBang(){
+  const g = new THREE.Group();
+  const nodes = [];
+  for (let i=0; i<240; i++){
+    const theta = Math.random()*Math.PI*2;
+    const phi = Math.acos(2*Math.random()-1);
+    const R = 20 + Math.pow(Math.random(), 0.65)*90;
+    nodes.push(new THREE.Vector3(
+      R*Math.sin(phi)*Math.cos(theta),
+      R*Math.cos(phi),
+      R*Math.sin(phi)*Math.sin(theta)));
+  }
+  nodes.forEach(n => {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeGlowTex('rgba(255,240,200,1)', 'rgba(255,200,140,0.5)'),
+      transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+    s.scale.set(1.8, 1.8, 1);
+    s.position.copy(n);
+    g.add(s);
+  });
+  const lp = [];
+  nodes.forEach((a, i) => {
+    nodes.map((b, j) => ({ b, d: a.distanceTo(b), j }))
+      .filter(o => o.j !== i).sort((x, y) => x.d - y.d).slice(0, 3)
+      .forEach(({ b }) => lp.push(a.x, a.y, a.z, b.x, b.y, b.z));
+  });
+  const lg = new THREE.BufferGeometry();
+  lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+  g.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({
+    color:0x88aaff, transparent:true, opacity:0.22, blending:THREE.AdditiveBlending })));
+
+  const t0 = Date.now();
+  updaters.push(() => {
+    const t = (Date.now() - t0)/1000;
+    const s = 0.15 + Math.pow(Math.min(t/5, 1), 0.5);
+    g.scale.set(s, s, s);
+    g.rotation.y = t * 0.04;
+  });
+  return g;
+}
+
+/* =========================================================
+   4. СВЕРХМАССИВНЫЕ ЧД
+========================================================= */
+function makeBigBlackHole(radius, name, glowColor){
+  const bh = new THREE.Group();
+  bh.add(new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 48, 48),
+    new THREE.MeshBasicMaterial({ color:0x000000 })));
+  const photon = new THREE.Mesh(
+    new THREE.TorusGeometry(radius*1.13, radius*0.02, 12, 100),
+    new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.9,
+      blending:THREE.AdditiveBlending, depthWrite:false }));
+  photon.rotation.x = Math.PI/2;
+  bh.add(photon);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex(glowColor, 'rgba(80,120,200,0.3)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  halo.scale.set(radius*7, radius*7, 1);
+  bh.add(halo);
+  if (name){
+    const lbl = makeLabel(name, null, radius*2.2);
+    lbl.position.y = -radius - radius*0.9;
+    bh.add(lbl);
+  }
+  return bh;
+}
+
+function buildSupermassive(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.3)));
+  const s = makeBigBlackHole(1.2, 'Солнце (для сравнения)', 'rgba(255,255,220,0.6)');
+  s.position.x = -34;
+  g.add(s);
+  g.add(makeBigBlackHole(6, 'TON 618', 'rgba(120,180,255,0.7)'));
+  const ph = makeBigBlackHole(11, 'Phoenix A', 'rgba(255,120,180,0.7)');
+  ph.position.x = 34;
+  g.add(ph);
+  return g;
+}
+
+/* =========================================================
+   5. ЧД + ЛИНЗА + ДЖЕТ
+========================================================= */
+function buildInfoParadox(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.4)));
+  g.add(new THREE.Mesh(
+    new THREE.SphereGeometry(2.6, 48, 48),
+    new THREE.MeshBasicMaterial({ color:0x000000 })));
+  const photon = new THREE.Mesh(
+    new THREE.TorusGeometry(3, 0.05, 12, 120),
+    new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.95,
+      blending:THREE.AdditiveBlending, depthWrite:false }));
+  photon.rotation.x = Math.PI/2;
+  g.add(photon);
+
+  const diskUniforms = { uTime: { value: 0 } };
+  const diskMat = new THREE.ShaderMaterial({
+    uniforms: diskUniforms,
+    vertexShader: `varying vec3 vWorldPos; varying float vRadius;
+      void main(){ vec4 wp = modelMatrix * vec4(position,1.0);
+        vWorldPos = wp.xyz; vRadius = length(position.xy);
+        gl_Position = projectionMatrix * viewMatrix * wp; }`,
+    fragmentShader: `${GLSL_NOISE}
+      uniform float uTime;
+      varying vec3 vWorldPos; varying float vRadius;
+      void main(){
+        float r = vRadius;
+        float a = atan(vWorldPos.y, vWorldPos.x);
+        float spin = a - uTime * (3.0 / pow(r, 0.7));
+        float n = fbm(vec3(spin*2.0, r*1.2, uTime*0.3));
+        float heat = pow(1.0 - clamp((r - 3.0)/19.0, 0.0, 1.0), 1.8);
+        heat *= 0.7 + n*0.5;
+        float doppler = 0.6 + 0.4 * sin(a + uTime*0.5);
+        vec3 col = mix(vec3(0.9,0.3,0.05), vec3(1.0,0.95,0.7), heat) * doppler;
+        gl_FragColor = vec4(col, heat);
+      }`,
+    transparent:true, depthWrite:false,
+    blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
+  const disk = new THREE.Mesh(new THREE.RingGeometry(3, 22, 128, 20), diskMat);
+  disk.rotation.x = Math.PI/2;
+  disk.rotation.z = 0.15;
+  g.add(disk);
+
+  const jetMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: `varying vec2 vUv;
+      void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+      void main(){
+        float y = vUv.y;
+        float intensity = pow(1.0 - y, 2.0) * 0.9;
+        intensity += sin(y*30.0 - uTime*4.0) * 0.15 + 0.15;
+        gl_FragColor = vec4(0.7, 0.85, 1.0, intensity);
+      }`,
+    transparent:true, depthWrite:false,
+    blending:THREE.AdditiveBlending, side:THREE.DoubleSide });
+  const jetGeom = new THREE.CylinderGeometry(0.1, 1.2, 14, 16, 1, true);
+  const jetTop = new THREE.Mesh(jetGeom, jetMat);
+  jetTop.position.y = 7;
+  g.add(jetTop);
+  const jetBot = new THREE.Mesh(jetGeom, jetMat);
+  jetBot.position.y = -7;
+  jetBot.rotation.x = Math.PI;
+  g.add(jetBot);
+
+  lensingPass.uniforms.uStrength.value = 0.85;
+  lensingPass.uniforms.uRadius.value = 0.10;
+  lensingPass.uniforms.uCenter.value.set(0.5, 0.5);
+
+  const lbl = makeLabel('ЧЁРНАЯ ДЫРА', 'гравитационная линза + джет', 22);
+  lbl.position.set(0, 20, 0);
+  g.add(lbl);
+
+  updaters.push((t) => {
+    diskUniforms.uTime.value = t;
+    jetMat.uniforms.uTime.value = t;
+    photon.material.opacity = 0.7 + Math.sin(t*4)*0.15;
+    lensingPass.uniforms.uTime.value = t;
+    lensingPass.uniforms.uStrength.value = 0.85 + Math.sin(t*2)*0.08;
+  });
+  return g;
+}
+
+/* =========================================================
+   6. БЕЛАЯ ДЫРА
+========================================================= */
+function buildWhiteHole(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.4)));
+  g.add(new THREE.Mesh(
+    new THREE.SphereGeometry(2.6, 48, 48),
+    new THREE.MeshBasicMaterial({ color:0xffffff })));
+  for (let i=0; i<4; i++){
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeGlowTex(`rgba(255,255,255,${1 - i*0.15})`, `rgba(200,230,255,${0.55 - i*0.1})`),
+      transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+    const s = 13 + i*9;
+    glow.scale.set(s, s, 1);
+    glow.userData = { base: s, phase: i*0.5 };
+    g.add(glow);
+    updaters.push((t) => {
+      const k = glow.userData.base * (1 + Math.sin(t*1.6 + glow.userData.phase) * 0.12);
+      glow.scale.set(k, k, 1);
+    });
+  }
+  const photon = new THREE.Mesh(
+    new THREE.TorusGeometry(3, 0.08, 12, 120),
+    new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.95,
+      blending:THREE.AdditiveBlending, depthWrite:false }));
+  photon.rotation.x = Math.PI/2;
+  g.add(photon);
+
+  const N = Math.floor(2500 * Q.particleScale);
+  const pos = new Float32Array(N*3);
+  const col = new Float32Array(N*3);
+  const vel = [];
+  for (let i=0; i<N; i++){
+    const a = Math.random()*Math.PI*2;
+    const b = Math.acos(2*Math.random()-1);
+    vel.push({ x:Math.sin(b)*Math.cos(a), y:Math.cos(b), z:Math.sin(b)*Math.sin(a),
+              r:3, speed:5 + Math.random()*12 });
+    col[i*3]=1.0; col[i*3+1]=0.85 + Math.random()*0.15; col[i*3+2]=0.5 + Math.random()*0.5;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    size:0.28, vertexColors:true, transparent:true, opacity:0.9,
+    blending:THREE.AdditiveBlending, sizeAttenuation:true, depthWrite:false })));
+
+  const lbl = makeLabel('БЕЛАЯ ДЫРА', 'время наоборот: ничего не входит, всё вылетает', 24);
+  lbl.position.set(0, 22, 0);
+  g.add(lbl);
+
+  updaters.push((t, dt) => {
+    photon.material.opacity = 0.75 + Math.sin(t*3)*0.2;
+    const p = geo.attributes.position.array;
+    vel.forEach((v, i) => {
+      v.r += v.speed * dt;
+      if (v.r > 55){
+        v.r = 3;
+        const a = Math.random()*Math.PI*2;
+        const b = Math.acos(2*Math.random()-1);
+        v.x = Math.sin(b)*Math.cos(a); v.y = Math.cos(b); v.z = Math.sin(b)*Math.sin(a);
+      }
+      p[i*3] = v.x*v.r; p[i*3+1] = v.y*v.r; p[i*3+2] = v.z*v.r;
+    });
+    geo.attributes.position.needsUpdate = true;
+  });
+  return g;
+}
+
+/* =========================================================
+   7. ЧЕРВОТОЧИНА
+========================================================= */
+function buildWormhole(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.5)));
+  const N = 70;
+  const rings = [];
+  for (let i=0; i<N; i++){
+    const t = i / (N - 1);
+    const x = (t - 0.5) * 44;
+    const rBase = 1.5 + Math.abs(x) * 0.7;
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(rBase, 0.06, 10, 70),
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color().setHSL(0.55 + Math.abs(t-0.5)*0.25, 0.9, 0.55 + Math.abs(t-0.5)*0.2),
+        transparent: true, opacity: 0.7 - Math.abs(t-0.5)*0.35,
+        blending: THREE.AdditiveBlending, depthWrite: false }));
+    ring.position.x = x;
+    ring.rotation.y = Math.PI / 2;
+    g.add(ring);
+    rings.push(ring);
+  }
+  const throat = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex('rgba(255,255,255,1)', 'rgba(180,220,255,0.7)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  throat.scale.set(6, 6, 1);
+  g.add(throat);
+  const traveler = new THREE.Mesh(
+    new THREE.SphereGeometry(0.35, 16, 16),
+    new THREE.MeshBasicMaterial({ color:0xffcc44 }));
+  g.add(traveler);
+  const travelerGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex('rgba(255,220,140,1)', 'rgba(255,160,60,0.6)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  travelerGlow.scale.set(3.5, 3.5, 1);
+  g.add(travelerGlow);
+
+  const g1 = makeGalaxy({ radius:3.5, armCount:2, starCount:1200, dustCount:200,
+    cA:'#ffe0c0', cB:'#ff8866' });
+  g1.position.set(-30, 0, 0);
+  g.add(g1);
+  const g2 = makeGalaxy({ radius:3.5, armCount:2, starCount:1200, dustCount:200,
+    cA:'#aaccff', cB:'#8866cc' });
+  g2.position.set(30, 0, 0);
+  g.add(g2);
+
+  const lbl = makeLabel('ЧЕРВОТОЧИНА', 'мост Эйнштейна—Розена', 26);
+  lbl.position.set(0, 20, 0);
+  g.add(lbl);
+
+  updaters.push((t) => {
+    throat.scale.setScalar(6 + Math.sin(t*2.2)*1.4);
+    rings.forEach((r, i) => {
+      const wave = Math.sin(t * 3 - i * 0.15) * 0.5 + 0.5;
+      r.material.opacity = (0.35 + wave * 0.5) * (0.7 - Math.abs(r.position.x / 20) * 0.35);
+      r.scale.setScalar(1 + wave * 0.06);
+    });
+    const u = Math.sin(t * 0.4) * 0.5 + 0.5;
+    const x = -22 + u * 44;
+    traveler.position.set(x, 0, 0);
+    travelerGlow.position.copy(traveler.position);
+    const nearThroat = 1 - Math.min(1, Math.abs(x) / 10);
+    traveler.scale.set(1 + nearThroat * 1.5, 1, 1);
+    g1.rotation.y += 0.004;
+    g2.rotation.y += 0.004;
+    g.rotation.y = Math.sin(t*0.08) * 0.35;
+  });
+  return g;
+}
+
+/* =========================================================
+   8. ВСЕЛЕННАЯ = МОЗГ
+========================================================= */
+function buildCosmicBrain(){
+  const g = new THREE.Group();
+  const buildNetwork = (offsetX, color, edgeColor) => {
+    const nodes = [];
+    for (let i=0; i<220; i++){
+      const a = Math.random()*Math.PI*2;
+      const r = Math.random()*18;
+      nodes.push(new THREE.Vector3(
+        offsetX + Math.cos(a)*r,
+        (Math.random()-0.5)*24,
+        Math.sin(a)*r*0.5 ));
+    }
+    const pos = [];
+    nodes.forEach(n => pos.push(n.x, n.y, n.z));
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.add(new THREE.Points(geo, new THREE.PointsMaterial({
+      color, size:0.9, transparent:true, opacity:0.95,
+      blending:THREE.AdditiveBlending, sizeAttenuation:true, depthWrite:false })));
+    const lines = [];
+    nodes.forEach((a, i) => {
+      nodes.map((b, j) => ({ b, d: a.distanceTo(b), j }))
+        .filter(o => o.j !== i).sort((x, y) => x.d - y.d).slice(0, 2)
+        .forEach(({ b }) => lines.push(a.x, a.y, a.z, b.x, b.y, b.z));
+    });
+    const lgeo = new THREE.BufferGeometry();
+    lgeo.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
+    g.add(new THREE.LineSegments(lgeo, new THREE.LineBasicMaterial({
+      color: edgeColor, transparent:true, opacity:0.4, blending:THREE.AdditiveBlending })));
+  };
+  buildNetwork(-25, 0xffcc66, 0xaa8844);
+  buildNetwork(25, 0x66ddff, 0x4488cc);
+  const l1 = makeLabel('ВСЕЛЕННАЯ', 'миллиарды галактик', 16);
+  l1.position.set(-25, 18, 0);
+  g.add(l1);
+  const l2 = makeLabel('МОЗГ', 'миллиарды нейронов', 16);
+  l2.position.set(25, 18, 0);
+  g.add(l2);
+  updaters.push((t) => { g.rotation.y = Math.sin(t*0.1)*0.4; });
+  return g;
+}
+
+/* =========================================================
+   9. ПАРАДОКС ФЕРМИ
+========================================================= */
+function buildFermi(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.5)));
+  const theories = [
+    ['Тёмный лес', 'все прячутся'],
+    ['Зоопарк', 'за нами смотрят'],
+    ['Замещение', 'нас заменили'],
+    ['Рай', 'все молчат'],
+    ['Быстрое расширение', 'все далеко']
+  ];
+  theories.forEach((th, i) => {
+    const x = -60 + i * 30;
+    const col = new THREE.Mesh(
+      new THREE.CylinderGeometry(2, 3, 22 + i*2, 8),
+      new THREE.MeshStandardMaterial({ color:0x0a0a1a, roughness:1 }));
+    col.position.set(x, -3, 0);
+    g.add(col);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeGlowTex('rgba(120,180,255,0.9)', 'rgba(60,100,200,0.4)'),
+      transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+    glow.scale.set(8, 8, 1);
+    glow.position.set(x, 12 + i, 0);
+    g.add(glow);
+    const lbl = makeLabel(th[0], th[1], 12);
+    lbl.position.set(x, -20, 0);
+    g.add(lbl);
+  });
+  const qs = [];
+  for (let i=0; i<20; i++){
+    const s = makeLabel('?', null, 8, '#aaccff', '#aaccff');
+    s.position.set(
+      (Math.random()-0.5)*140,
+      (Math.random()-0.5)*70,
+      (Math.random()-0.5)*90 );
+    s.userData.phase = Math.random()*Math.PI*2;
+    g.add(s);
+    qs.push(s);
+  }
+  updaters.push((t) => {
+    qs.forEach(s => s.material.opacity = 0.25 + 0.6*(0.5 + 0.5*Math.sin(t*1.5 + s.userData.phase)));
+  });
+  return g;
+}
+
+/* =========================================================
+   10. КВАНТОВАЯ ФИЗИКА
+========================================================= */
+function buildQuantum(){
+  const g = new THREE.Group();
+  const l1 = makeLabel('СУПЕРПОЗИЦИЯ', 'частица во всех состояниях сразу', 20);
+  l1.position.set(-22, 20, 0);
+  g.add(l1);
+  const ghosts = [];
+  for (let i=0; i<14; i++){
+    const ghost = new THREE.Mesh(
+      new THREE.SphereGeometry(1.4, 24, 24),
+      new THREE.MeshStandardMaterial({
+        color:0x66ccff, emissive:0x224488, emissiveIntensity:1.5,
+        transparent:true, opacity:0.35, depthWrite:false }));
+    ghost.userData = { a:(i/14)*Math.PI*2, i };
+    g.add(ghost);
+    ghosts.push(ghost);
+  }
+  const l2 = makeLabel('ЗАПУТАННОСТЬ', 'мгновенная связь', 24);
+  l2.position.set(22, 20, 0);
+  g.add(l2);
+  const p1 = new THREE.Mesh(new THREE.SphereGeometry(1.6, 24, 24),
+    new THREE.MeshStandardMaterial({ color:0xffaa44, emissive:0xff6622, emissiveIntensity:1.2 }));
+  const p2 = new THREE.Mesh(new THREE.SphereGeometry(1.6, 24, 24),
+    new THREE.MeshStandardMaterial({ color:0x44aaff, emissive:0x2266ff, emissiveIntensity:1.2 }));
+  g.add(p1, p2);
+  const linkGeo = new THREE.BufferGeometry();
+  linkGeo.setAttribute('position', new THREE.Float32BufferAttribute([0,0,0,0,0,0], 3));
+  g.add(new THREE.Line(linkGeo, new THREE.LineBasicMaterial({
+    color:0xffffff, transparent:true, opacity:0.85, blending:THREE.AdditiveBlending })));
+
+  updaters.push((t) => {
+    ghosts.forEach(gh => {
+      const a = gh.userData.a + t*0.6;
+      gh.position.set(
+        -22 + Math.cos(a)*8,
+        Math.sin(gh.userData.a*2 + t*0.5)*4,
+        Math.sin(a)*8 );
+      gh.material.opacity = 0.2 + 0.4*(0.5 + 0.5*Math.sin(t*3 + gh.userData.i));
+    });
+    const a = t*0.9;
+    p1.position.set(22 + Math.cos(a)*7, Math.sin(a*1.4)*4, Math.sin(a)*7);
+    p2.position.set(22 - Math.cos(a)*7, -Math.sin(a*1.4)*4, -Math.sin(a)*7);
+    const arr = linkGeo.attributes.position.array;
+    arr[0]=p1.position.x; arr[1]=p1.position.y; arr[2]=p1.position.z;
+    arr[3]=p2.position.x; arr[4]=p2.position.y; arr[5]=p2.position.z;
+    linkGeo.attributes.position.needsUpdate = true;
+  });
+  return g;
+}
+
+/* =========================================================
+   11. ВОЙД ВОЛОПАСА
+========================================================= */
+function buildBootesVoid(){
+  const g = new THREE.Group();
+  const count = Math.floor(Q.starCount * 1.5);
+  const pos = [], col = [];
+  for (let i=0; i<count; i++){
+    const theta = Math.random()*Math.PI*2;
+    const phi = Math.acos(2*Math.random()-1);
+    const R = 32 + Math.random()*60;
+    pos.push(R*Math.sin(phi)*Math.cos(theta), R*Math.cos(phi)*1.2, R*Math.sin(phi)*Math.sin(theta));
+    const c = 0.6 + Math.random()*0.4;
+    col.push(c, c, c);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    size:0.7, vertexColors:true, transparent:true, opacity:0.95,
+    sizeAttenuation:true, depthWrite:false })));
+  g.add(new THREE.Mesh(
+    new THREE.SphereGeometry(15, 40, 40),
+    new THREE.MeshBasicMaterial({ color:0x000000 })));
+  const lbl = makeLabel('ВОЙД ВОЛОПАСА', '700 млн световых лет пустоты', 26);
+  lbl.position.set(0, 22, 0);
+  g.add(lbl);
+  updaters.push((t) => { g.rotation.y = t*0.06; });
+  return g;
+}
+
+/* =========================================================
+   12. ЗНАК ВОПРОСА
+========================================================= */
+function buildQuestionMark(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.3)));
+  const cloudCount = Math.floor(1500 * Q.particleScale);
+  for (let i=0; i<cloudCount; i++){
+    let x, y;
+    if (i < cloudCount * 0.15){
+      const a = Math.random()*Math.PI*2;
+      const r = Math.pow(Math.random(), 2) * 2.5;
+      x = Math.cos(a) * r;
+      y = -7 + (Math.random()-0.5)*2.5;
+    } else {
+      const a = Math.PI*0.15 + Math.random() * Math.PI * 1.7;
+      const r = 6;
+      x = Math.cos(a) * r;
+      y = Math.sin(a) * r + 2;
+      const blur = Math.pow(Math.random(), 0.7) * 3.5;
+      const ba = Math.random()*Math.PI*2;
+      x += Math.cos(ba) * blur * Math.random();
+      y += Math.sin(ba) * blur * Math.random();
+    }
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeCloudTex(255, 200, 120),
+      transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, opacity: 0.25 + Math.random()*0.25 }));
+    const size = 1.5 + Math.random()*2.5;
+    sp.scale.set(size, size, 1);
+    sp.position.set(x, y, (Math.random()-0.5)*3.5);
+    g.add(sp);
+  }
+  const core = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex('rgba(255,220,180,1)', 'rgba(255,160,60,0.7)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  core.scale.set(18, 18, 1);
+  g.add(core);
+  const lbl = makeLabel('ЗНАК ВОПРОСА', 'Джеймс Уэбб, 2024', 22);
+  lbl.position.set(0, 20, 0);
+  g.add(lbl);
+  updaters.push((t) => {
+    g.rotation.y = Math.sin(t*0.15) * 0.35;
+    const s = 18 + Math.sin(t*2)*1.2;
+    core.scale.set(s, s, 1);
+  });
+  return g;
+}
+
+/* =========================================================
+   13. РУКА БОГА
+========================================================= */
+function buildHandOfGod(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.2)));
+  const pulsar = new THREE.Mesh(
+    new THREE.SphereGeometry(1.2, 24, 24),
+    new THREE.MeshBasicMaterial({ color:0xfff0cc }));
+  pulsar.position.set(15, 0, 0);
+  g.add(pulsar);
+  const pg = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex('rgba(255,240,200,1)', 'rgba(255,180,80,0.65)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  pg.scale.set(15, 15, 1);
+  pg.position.copy(pulsar.position);
+  g.add(pg);
+  const hand = new THREE.Group();
+  hand.position.set(15, 0, 0);
+  const fingers = [
+    { ang:-0.55, len:18, w:1.8 }, { ang:-0.28, len:20, w:1.9 },
+    { ang: 0.00, len:21, w:2.0 }, { ang: 0.26, len:19, w:1.9 },
+    { ang: 0.50, len:16, w:1.7 }
+  ];
+  fingers.forEach(f => {
+    const cnt = Math.floor(200 * Q.particleScale);
+    for (let i=0; i<cnt; i++){
+      const t = Math.random();
+      const r = t * f.len;
+      const spread = Math.sin(t * Math.PI) * f.w;
+      const a = f.ang + (Math.random()-0.5) * 0.22;
+      const x = -Math.cos(a) * r + (Math.random()-0.5) * spread;
+      const y = Math.sin(a) * r + (Math.random()-0.5) * spread;
+      const z = (Math.random()-0.5) * 1.8;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: makeCloudTex(150, 200, 255),
+        transparent: true, depthWrite: false,
+        blending: THREE.AdditiveBlending, opacity: 0.4 + Math.random()*0.3 }));
+      const size = 1 + Math.random()*1.5;
+      sp.scale.set(size, size, 1);
+      sp.position.set(x, y, z);
+      hand.add(sp);
+    }
+  });
+  const palmCount = Math.floor(400 * Q.particleScale);
+  for (let i=0; i<palmCount; i++){
+    const r = Math.pow(Math.random(), 0.6) * 4.5;
+    const a = Math.random() * Math.PI * 2;
+    const x = -3 + Math.cos(a) * r;
+    const y = Math.sin(a) * r * 1.2;
+    const z = (Math.random()-0.5) * 2.8;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeCloudTex(150, 200, 255),
+      transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, opacity: 0.4 + Math.random()*0.3 }));
+    const size = 1 + Math.random()*1.5;
+    sp.scale.set(size, size, 1);
+    sp.position.set(x, y, z);
+    hand.add(sp);
+  }
+  g.add(hand);
+  const lbl = makeLabel('РУКА БОГА', 'PSR B1509-58 · пульсар', 22);
+  lbl.position.set(0, 24, 0);
+  g.add(lbl);
+  updaters.push((t) => {
+    const s = 15 + Math.sin(t*4)*3;
+    pg.scale.set(s, s, 1);
+    hand.rotation.y = Math.sin(t*0.15)*0.15;
+  });
+  return g;
+}
+
+/* =========================================================
+   14. ТУМАННОСТЬ СЕРДЦЕ
+========================================================= */
+function buildHeartNebula(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.5)));
+  const cloudCount = Math.floor(2200 * Q.particleScale);
+  for (let i=0; i<cloudCount; i++){
+    const t = Math.random() * Math.PI * 2;
+    const hx = 16 * Math.pow(Math.sin(t), 3);
+    const hy = 13*Math.cos(t) - 5*Math.cos(2*t) - 2*Math.cos(3*t) - Math.cos(4*t);
+    const blur = Math.pow(Math.random(), 0.7) * 9;
+    const a = Math.random() * Math.PI * 2;
+    const x = hx*0.85 + Math.cos(a)*blur*Math.random();
+    const y = hy*0.85 + Math.sin(a)*blur*Math.random();
+    const z = (Math.random()-0.5) * 8;
+    const cIdx = Math.random();
+    let rgb;
+    if (cIdx < 0.3) rgb = [255, 120, 160];
+    else if (cIdx < 0.7) rgb = [230, 40, 90];
+    else rgb = [180, 20, 80];
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeCloudTex(rgb[0], rgb[1], rgb[2]),
+      transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, opacity: 0.25 + Math.random()*0.3 }));
+    const size = 1.5 + Math.random()*2.8;
+    sp.scale.set(size, size, 1);
+    sp.position.set(x, y, z);
+    g.add(sp);
+  }
+  const core = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex('rgba(255,255,255,1)', 'rgba(180,220,255,0.8)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  core.scale.set(11, 11, 1);
+  g.add(core);
+  const lbl = makeLabel('ТУМАННОСТЬ СЕРДЦЕ', 'IC 1805 · 7500 св. лет', 24);
+  lbl.position.set(0, 30, 0);
+  g.add(lbl);
+  updaters.push((t) => {
+    g.rotation.y = Math.sin(t*0.2) * 0.2;
+    const s = 11 + Math.sin(t*1.8)*0.6;
+    core.scale.set(s, s, 1);
+  });
+  return g;
+}
+
+/* =========================================================
+   15. ЗАКАТ НА МАРСЕ
+========================================================= */
+function buildMarsSunset(){
+  const g = new THREE.Group();
+  const hillGeom = new THREE.PlaneGeometry(500, 250, 100, 50);
+  const hp = hillGeom.attributes.position;
+  for (let i=0; i<hp.count; i++){
+    const x = hp.getX(i), y = hp.getY(i);
+    hp.setZ(i, Math.sin(x*0.06)*2.5 + Math.cos(x*0.13 + y*0.08)*1.8 + Math.random()*0.4);
+  }
+  hillGeom.computeVertexNormals();
+  const hillMat = makePlanetMaterial({
+    colorA:'#5a2010', colorB:'#b06840', seed:77, strength:1.2 });
+  hillMat.roughness = 1.0;
+  const hill = new THREE.Mesh(hillGeom, hillMat);
+  hill.rotation.x = -Math.PI/2;
+  hill.position.y = -7;
+  g.add(hill);
+  const skyGeom = new THREE.SphereGeometry(400, 48, 48);
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    uniforms: {
+      uTop: { value: new THREE.Color(0x1a3a6a) },
+      uMid: { value: new THREE.Color(0x6a8ab8) },
+      uBot: { value: new THREE.Color(0x8a5a3a) }
+    },
+    vertexShader: `varying vec3 vPos;
+      void main(){ vPos = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `uniform vec3 uTop, uMid, uBot; varying vec3 vPos;
+      void main(){
+        float h = vPos.y;
+        vec3 col = h > 0.15
+          ? mix(uMid, uTop, smoothstep(0.15, 0.8, h))
+          : mix(uBot, uMid, smoothstep(-0.2, 0.15, h));
+        gl_FragColor = vec4(col, 1.0);
+      }`
+  });
+  g.add(new THREE.Mesh(skyGeom, skyMat));
+  const sun = new THREE.Mesh(
+    new THREE.SphereGeometry(1.2, 24, 24),
+    new THREE.MeshBasicMaterial({ color:0xffffff }));
+  sun.position.set(0, -1, -80);
+  g.add(sun);
+  const sg = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex('rgba(255,255,255,1)', 'rgba(200,220,255,0.5)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  sg.scale.set(30, 30, 1);
+  sg.position.copy(sun.position);
+  g.add(sg);
+  const dustCount = Math.floor(1500 * Q.particleScale);
+  const dPos = [], dCol = [];
+  for (let i=0; i<dustCount; i++){
+    dPos.push((Math.random()-0.5)*300, Math.random()*60 - 10, -Math.random()*200);
+    dCol.push(0.6 + Math.random()*0.3, 0.55 + Math.random()*0.3, 0.85 + Math.random()*0.15);
+  }
+  const dg = new THREE.BufferGeometry();
+  dg.setAttribute('position', new THREE.Float32BufferAttribute(dPos, 3));
+  dg.setAttribute('color', new THREE.Float32BufferAttribute(dCol, 3));
+  g.add(new THREE.Points(dg, new THREE.PointsMaterial({
+    size:0.5, vertexColors:true, transparent:true, opacity:0.35,
+    sizeAttenuation:true, depthWrite:false, blending:THREE.AdditiveBlending })));
+  const lbl = makeLabel('ЗАКАТ НА МАРСЕ', 'небо голубое, Солнце — белое', 24);
+  lbl.position.set(0, 22, -40);
+  g.add(lbl);
+  return g;
+}
+
+/* =========================================================
+   16. СТОЛПЫ ТВОРЕНИЯ
+========================================================= */
+function buildPillars(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.4)));
+  const pillars = [
+    { x:-13, h:42, w:7 }, { x:2, h:52, w:8 }, { x:14, h:36, w:6.5 }
+  ];
+  pillars.forEach(p => {
+    const cnt = Math.floor(600 * Q.particleScale);
+    for (let i=0; i<cnt; i++){
+      const t = Math.random();
+      const y = t*p.h - p.h/2;
+      const taper = 1 - t*0.65;
+      const wa = p.w * taper * (0.7 + Math.random()*0.6);
+      const a = Math.random()*Math.PI*2;
+      const r = Math.pow(Math.random(), 0.55) * wa;
+      const x = p.x + Math.cos(a)*r;
+      const z = Math.sin(a)*r*0.7;
+      const topGlow = Math.pow(t, 1.5);
+      const r0 = 130 + topGlow*100;
+      const gg = 70 + topGlow*80;
+      const b0 = 40 + topGlow*50;
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: makeCloudTex(r0, gg, b0),
+        transparent: true, depthWrite: false,
+        blending: THREE.AdditiveBlending, opacity: 0.3 + Math.random()*0.3 }));
+      const size = 1.2 + Math.random()*1.8;
+      sp.scale.set(size, size, 1);
+      sp.position.set(x, y, z);
+      g.add(sp);
+    }
+  });
+  const bgCount = Math.floor(800 * Q.particleScale);
+  for (let i=0; i<bgCount; i++){
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeCloudTex(60, 130, 200),
+      transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, opacity: 0.15 + Math.random()*0.2 }));
+    const size = 4 + Math.random()*6;
+    sp.scale.set(size, size, 1);
+    sp.position.set(
+      (Math.random()-0.5)*110,
+      (Math.random()-0.5)*80,
+      -25 - Math.random()*25 );
+    g.add(sp);
+  }
+  const lbl = makeLabel('СТОЛПЫ ТВОРЕНИЯ', 'туманность Орёл · рождение звёзд', 26);
+  lbl.position.set(0, 38, 0);
+  g.add(lbl);
+  updaters.push((t) => { g.rotation.y = Math.sin(t*0.12)*0.15; });
+  return g;
+}
+
+/* =========================================================
+   17. ЮПИТЕР
+========================================================= */
+function buildJupiter(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.3)));
+  const W = 1024, H = 512;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const bands = [
+    ['#c9a882',0.00,0.07],['#e8d9b8',0.07,0.12],['#b8875a',0.12,0.20],
+    ['#e8d9b8',0.20,0.26],['#c9a882',0.26,0.34],['#e8d9b8',0.34,0.42],
+    ['#c9a882',0.42,0.50],['#b8875a',0.50,0.58],['#e8d9b8',0.58,0.66],
+    ['#c9a882',0.66,0.74],['#b8875a',0.74,0.82],['#c9a882',0.82,0.90],
+    ['#e8d9b8',0.90,1.00]
+  ];
+  bands.forEach(([c,y1,y2]) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(0, y1*H, W, (y2-y1)*H);
+  });
+  for (let i=0; i<3000; i++){
+    ctx.fillStyle = `rgba(${Math.random()>0.5?'255,255,255':'80,50,30'},${Math.random()*0.11})`;
+    ctx.beginPath();
+    ctx.ellipse(Math.random()*W, Math.random()*H,
+      20 + Math.random()*100, 4 + Math.random()*16, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+  const sx = W*0.62, sy = H*0.62, srx = W*0.075, sry = H*0.075;
+  const rg = ctx.createRadialGradient(sx, sy, 0, sx, sy, srx);
+  rg.addColorStop(0, '#ff9955'); rg.addColorStop(0.5, '#cc4422'); rg.addColorStop(1, '#8a2211');
+  ctx.fillStyle = rg;
+  ctx.beginPath();
+  ctx.ellipse(sx, sy, srx, sry, 0, 0, Math.PI*2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const nm = heightmapToNormal(cv);
+  const ntex = new THREE.CanvasTexture(nm);
+  const jup = new THREE.Mesh(
+    new THREE.SphereGeometry(12, Q.sphereSeg, Q.sphereSeg),
+    new THREE.MeshStandardMaterial({
+      map: tex, normalMap: ntex,
+      normalScale: new THREE.Vector2(0.7, 0.7),
+      roughness: 0.85 }));
+  g.add(jup);
+  jup.add(makeAtmosphere(12, 0xffcc88, 0.9));
+  const lbl = makeLabel('БОЛЬШОЕ КРАСНОЕ ПЯТНО', 'ураган размером с 3 Земли', 26);
+  lbl.position.set(0, -18, 0);
+  g.add(lbl);
+  updaters.push((t, dt) => { jup.rotation.y += dt * 0.12; });
+  return g;
+}
+
+/* =========================================================
+   18. СУПЕР-САТУРН
+========================================================= */
+function buildSuperSaturn(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.3)));
+  const planet = new THREE.Mesh(
+    new THREE.SphereGeometry(3.2, Q.sphereSeg, Q.sphereSeg),
+    makePlanetMaterial({ colorA:'#c8a878', colorB:'#f0d9b0', seed:21, bands:6 }));
+  g.add(planet);
+  planet.add(makeAtmosphere(3.2, 0xffddaa, 0.7));
+  const rings = makeSaturnRings(4.5, 32);
+  rings.rotation.x = Math.PI/2 + 0.32;
+  g.add(rings);
+  const moonMat = REAL_TEX.moon
+    ? new THREE.MeshStandardMaterial({ map: REAL_TEX.moon, roughness: 1.0 })
+    : makePlanetMaterial({ colorA:'#404040', colorB:'#d0d0d0', seed:50 });
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(0.75, 32, 32), moonMat);
+  g.add(moon);
+  const lbl = makeLabel('J1407b', 'кольца в 200 раз больше Сатурна', 24);
+  lbl.position.set(0, -30, 0);
+  g.add(lbl);
+  updaters.push((t, dt) => {
+    planet.rotation.y += dt*0.2;
+    const a = t*0.5;
+    moon.position.set(Math.cos(a)*38, 0, Math.sin(a)*38);
+  });
+  return g;
+}
+
+/* =========================================================
+   19. ЭКЗОПЛАНЕТЫ
+========================================================= */
+function buildExoplanets(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.5)));
+  const data = [
+    { name:'TrES-2b', desc:'чернее угля',
+      mat:{ colorA:'#020202', colorB:'#0a0a0a', seed:61 }, x:-40, r:3.2, atmo:null },
+    { name:'KELT-9b', desc:'4000°C',
+      mat:{ colorA:'#ff3300', colorB:'#ffcc66', seed:62, bands:3 }, x:-20, r:3.6, atmo:{c:0xff5500, i:1.8} },
+    { name:'HD 189733b', desc:'стеклянные дожди',
+      mat:{ colorA:'#1a5ab0', colorB:'#7ac0ff', seed:63 }, x:0, r:3.3, atmo:{c:0x5599ff, i:1.4} },
+    { name:'PSR J1719', desc:'алмазная',
+      mat:{ colorA:'#cce0ff', colorB:'#ffffff', seed:64, metalness:0.9 }, x:20, r:3.9, atmo:null },
+    { name:'Gliese 581c', desc:'похожа на Землю',
+      mat:{ colorA:'#1a4a1a', colorB:'#8a6a3a', seed:65 }, x:40, r:2.9, atmo:{c:0x6699ff, i:1.2} }
+  ];
+  data.forEach((p, i) => {
+    const mat = makePlanetMaterial(p.mat);
+    if (p.mat.metalness) mat.metalness = p.mat.metalness;
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.r, Q.sphereSeg, Q.sphereSeg), mat);
+    mesh.position.set(p.x, 0, 0);
+    mesh.userData = { phase: i*0.8 };
+    g.add(mesh);
+    if (p.atmo) mesh.add(makeAtmosphere(p.r, p.atmo.c, p.atmo.i));
+    const lbl = makeLabel(p.name, p.desc, 11);
+    lbl.position.set(p.x, -p.r - 4, 0);
+    g.add(lbl);
+    updaters.push((t, dt) => {
+      mesh.rotation.y += dt * 0.35;
+      mesh.position.y = Math.sin(t*1.1 + mesh.userData.phase) * 0.6;
+    });
+  });
+  return g;
+}
+
+/* =========================================================
+   20. ЗВЕЗДА = КЛЕТКА
+========================================================= */
+function buildStarAndCell(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.3)));
+  const snGroup = new THREE.Group();
+  snGroup.position.x = -30;
+  snGroup.add(new THREE.Mesh(
+    new THREE.SphereGeometry(1.5, 24, 24),
+    new THREE.MeshBasicMaterial({ color:0xffffff })));
+  const snGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex('rgba(255,255,255,1)', 'rgba(255,180,60,0.7)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  snGlow.scale.set(20, 20, 1);
+  snGroup.add(snGlow);
+  const debrisCnt = Math.floor(6000 * Q.particleScale);
+  const debrisGeo = new THREE.BufferGeometry();
+  const debrisPos = new Float32Array(debrisCnt*3);
+  const debrisCol = new Float32Array(debrisCnt*3);
+  const debrisVel = [];
+  for (let i=0; i<debrisCnt; i++){
+    const a = Math.random()*Math.PI*2;
+    const b = Math.acos(2*Math.random()-1);
+    debrisVel.push({ x: Math.sin(b)*Math.cos(a), y: Math.cos(b), z: Math.sin(b)*Math.sin(a) });
+    const c = Math.random();
+    debrisCol[i*3]=1.0; debrisCol[i*3+1]=0.6+c*0.4; debrisCol[i*3+2]=0.2+c*0.4;
+  }
+  debrisGeo.setAttribute('position', new THREE.BufferAttribute(debrisPos, 3));
+  debrisGeo.setAttribute('color', new THREE.BufferAttribute(debrisCol, 3));
+  snGroup.add(new THREE.Points(debrisGeo, new THREE.PointsMaterial({
+    size:0.3, vertexColors:true, transparent:true, opacity:0.9,
+    blending:THREE.AdditiveBlending, sizeAttenuation:true, depthWrite:false })));
+  g.add(snGroup);
+  const cellGroup = new THREE.Group();
+  cellGroup.position.x = 30;
+  const cell1 = new THREE.Mesh(
+    new THREE.SphereGeometry(4, 32, 32),
+    new THREE.MeshStandardMaterial({
+      color:0x33aaff, emissive:0x114466, emissiveIntensity:0.9,
+      transparent:true, opacity:0.45 }));
+  const cell2 = new THREE.Mesh(
+    new THREE.SphereGeometry(4, 32, 32),
+    new THREE.MeshStandardMaterial({
+      color:0x33ffaa, emissive:0x116644, emissiveIntensity:0.9,
+      transparent:true, opacity:0.45 }));
+  cellGroup.add(cell1, cell2);
+  const nucleus1 = new THREE.Mesh(
+    new THREE.SphereGeometry(1.2, 24, 24),
+    new THREE.MeshStandardMaterial({
+      color:0xffee66, emissive:0xffaa22, emissiveIntensity:1.5 }));
+  const nucleus2 = nucleus1.clone();
+  cellGroup.add(nucleus1, nucleus2);
+  g.add(cellGroup);
+  const lblL = makeLabel('ВЗРЫВ ЗВЕЗДЫ', 'сверхновая', 16);
+  lblL.position.set(-30, 20, 0);
+  g.add(lblL);
+  const lblR = makeLabel('РОЖДЕНИЕ КЛЕТКИ', 'деление', 16);
+  lblR.position.set(30, 20, 0);
+  g.add(lblR);
+  const lblC = makeLabel('= ?', null, 8, '#ffcc88');
+  lblC.position.set(0, 0, 0);
+  g.add(lblC);
+  updaters.push((t) => {
+    const cyc = (t % 6) / 6;
+    const phase = cyc < 0.5 ? cyc * 2 : (2 - cyc * 2);
+    const snSize = 5 + phase * 22;
+    snGlow.scale.set(snSize, snSize, 1);
+    const dp = debrisGeo.attributes.position.array;
+    debrisVel.forEach((v, i) => {
+      const r = phase * 26;
+      dp[i*3] = v.x * r;
+      dp[i*3+1] = v.y * r;
+      dp[i*3+2] = v.z * r;
+    });
+    debrisGeo.attributes.position.needsUpdate = true;
+    const split = Math.sin(t*0.5) * 0.5 + 0.5;
+    const sep = 2 + split * 4;
+    cell1.position.x = -sep;
+    cell2.position.x = sep;
+    nucleus1.position.x = -sep * 0.9;
+    nucleus2.position.x = sep * 0.9;
+    cellGroup.rotation.y = t * 0.15;
+  });
+  return g;
+}
+
+/* =========================================================
+   21. ТОНКАЯ НАСТРОЙКА
+========================================================= */
+function buildFineTuning(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.3)));
+  const constants = ['G','c','ħ','m_e','e','Λ'];
+  const hints = ['гравитация','скорость света','Планк','электрон','заряд','космология'];
+  const sliders = [];
+  constants.forEach((name, i) => {
+    const x = -22 + i * 8.8;
+    const rod = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.15, 0.15, 20, 12),
+      new THREE.MeshStandardMaterial({ color:0x4466aa, emissive:0x223366, emissiveIntensity:0.8 }));
+    rod.position.set(x, 0, 0);
+    g.add(rod);
+    const danger = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.18, 6, 12),
+      new THREE.MeshBasicMaterial({ color:0xff3344, transparent:true, opacity:0.7 }));
+    danger.position.set(x, 7, 0);
+    g.add(danger);
+    const danger2 = danger.clone();
+    danger2.position.set(x, -7, 0);
+    g.add(danger2);
+    const safe = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.22, 0.22, 1.6, 12),
+      new THREE.MeshBasicMaterial({ color:0x33ff77, transparent:true, opacity:0.85,
+        blending:THREE.AdditiveBlending }));
+    safe.position.set(x, 0, 0);
+    g.add(safe);
+    const knob = new THREE.Mesh(
+      new THREE.SphereGeometry(0.8, 20, 20),
+      new THREE.MeshBasicMaterial({ color:0xffffff }));
+    knob.position.set(x, 0, 0.6);
+    g.add(knob);
+    const knobGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeGlowTex('rgba(255,255,255,1)', 'rgba(180,220,255,0.7)'),
+      transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+    knobGlow.scale.set(5, 5, 1);
+    knobGlow.position.copy(knob.position);
+    g.add(knobGlow);
+    const lbl = makeLabel(name, hints[i], 7);
+    lbl.position.set(x, -13, 0);
+    g.add(lbl);
+    sliders.push({ knob, knobGlow, safe, phase: i * 1.1 });
+  });
+  const title = makeLabel('ТОНКАЯ НАСТРОЙКА', 'отклонение → нет жизни', 40);
+  title.position.set(0, 24, 0);
+  g.add(title);
+  updaters.push((t) => {
+    sliders.forEach((s) => {
+      const wiggle = Math.sin(t * 0.8 + s.phase) * 3.5;
+      s.knob.position.y = wiggle;
+      s.knobGlow.position.y = wiggle;
+      const inSafe = Math.abs(wiggle) < 0.8;
+      s.safe.material.opacity = inSafe ? 0.85 : 0.25;
+      s.safe.material.color.setHex(inSafe ? 0x33ff77 : 0xff3344);
+    });
+    g.rotation.y = Math.sin(t*0.1) * 0.15;
+  });
+  return g;
+}
+
+/* =========================================================
+   22. КВАНТОВОЕ БЕССМЕРТИЕ
+========================================================= */
+function buildQuantumImmortality(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.4)));
+  const branches = [];
+  const rootPos = new THREE.Vector3(0, -18, 0);
+  function makeBranch(from, dir, length, depth, color){
+    if (depth > 4) return;
+    const to = from.clone().add(dir.clone().multiplyScalar(length));
+    const geo = new THREE.BufferGeometry().setFromPoints([from, to]);
+    g.add(new THREE.Line(geo, new THREE.LineBasicMaterial({
+      color, transparent:true, opacity:0.85, blending:THREE.AdditiveBlending })));
+    const node = new THREE.Mesh(
+      new THREE.SphereGeometry(0.25 + (4 - depth) * 0.1, 12, 12),
+      new THREE.MeshBasicMaterial({
+        color: depth === 4 ? 0xffee66 : 0x88ccff,
+        transparent:true, opacity:0.9 }));
+    node.position.copy(to);
+    g.add(node);
+    branches.push({ node, baseScale: node.scale.x, phase: Math.random()*Math.PI*2 });
+    for (let i=0; i<2; i++){
+      const angle = (i === 0 ? -1 : 1) * (0.4 + Math.random()*0.2);
+      const newDir = dir.clone().applyAxisAngle(new THREE.Vector3(0,0,1), angle).normalize();
+      const newColor = new THREE.Color(color).offsetHSL(0.04, 0, 0.1);
+      makeBranch(to, newDir, length * 0.7, depth + 1, newColor.getHex());
+    }
+  }
+  const up = new THREE.Vector3(0, 1, 0);
+  makeBranch(rootPos, up.clone().applyAxisAngle(new THREE.Vector3(0,0,1), -0.15), 5, 0, 0xffffff);
+  makeBranch(rootPos, up.clone(), 5, 0, 0xffffff);
+  makeBranch(rootPos, up.clone().applyAxisAngle(new THREE.Vector3(0,0,1), 0.15), 5, 0, 0xffffff);
+  const you = new THREE.Mesh(
+    new THREE.SphereGeometry(0.9, 20, 20),
+    new THREE.MeshBasicMaterial({ color:0xffcc44 }));
+  you.position.copy(rootPos);
+  g.add(you);
+  const youGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex('rgba(255,220,140,1)', 'rgba(255,160,60,0.7)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  youGlow.scale.set(8, 8, 1);
+  youGlow.position.copy(rootPos);
+  g.add(youGlow);
+  const lbl = makeLabel('КВАНТОВОЕ БЕССМЕРТИЕ', 'в какой-то ветке ты всегда жив', 26);
+  lbl.position.set(0, 26, 0);
+  g.add(lbl);
+  const warn = makeLabel('⚠ это теория, не проверяй', null, 18, '#ff8866');
+  warn.position.set(0, 22, 0);
+  g.add(warn);
+  updaters.push((t) => {
+    const s = 8 + Math.sin(t*2)*0.8;
+    youGlow.scale.set(s, s, 1);
+    branches.forEach(b => {
+      const flicker = 0.5 + 0.5 * Math.sin(t*3 + b.phase);
+      b.node.material.opacity = 0.3 + flicker * 0.7;
+      const sc = b.baseScale * (0.8 + flicker * 0.5);
+      b.node.scale.set(sc, sc, sc);
+    });
+    g.rotation.y = Math.sin(t*0.1) * 0.3;
+  });
+  return g;
+}
+
+/* =========================================================
+   23. МЫ НЕ КАСАЛИСЬ
+========================================================= */
+function buildNoTouch(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.3)));
+  const makeHand = (sign) => {
+    const handGroup = new THREE.Group();
+    const palmCnt = Math.floor(2000 * Q.particleScale);
+    const palmPos = [];
+    for (let i=0; i<palmCnt; i++){
+      const r = Math.pow(Math.random(), 0.5) * 3;
+      const a = Math.random()*Math.PI*2;
+      palmPos.push(Math.cos(a)*r*0.6, Math.sin(a)*r, Math.sin(a*2)*0.5);
+    }
+    const palmGeo = new THREE.BufferGeometry();
+    palmGeo.setAttribute('position', new THREE.Float32BufferAttribute(palmPos, 3));
+    handGroup.add(new THREE.Points(palmGeo, new THREE.PointsMaterial({
+      color: 0xffddbb, size:0.18, transparent:true, opacity:0.65,
+      blending:THREE.AdditiveBlending, sizeAttenuation:true, depthWrite:false })));
+    const fingerCnt = Math.floor(1000 * Q.particleScale);
+    const fPos = [];
+    for (let i=0; i<fingerCnt; i++){
+      const t = Math.random();
+      const r = t * 3.5;
+      const a = (Math.random()-0.5) * 0.35;
+      fPos.push(
+        sign * (r + 3.2),
+        Math.sin(a) * 0.6 + 0.5,
+        Math.cos(a)*0.6 - 0.6 + (Math.random()-0.5)*0.3 );
+    }
+    const fGeo = new THREE.BufferGeometry();
+    fGeo.setAttribute('position', new THREE.Float32BufferAttribute(fPos, 3));
+    handGroup.add(new THREE.Points(fGeo, new THREE.PointsMaterial({
+      color: 0xffddbb, size:0.18, transparent:true, opacity:0.75,
+      blending:THREE.AdditiveBlending, sizeAttenuation:true, depthWrite:false })));
+    return handGroup;
+  };
+  const leftHand = makeHand(1);
+  leftHand.position.set(-9, 0, 0);
+  leftHand.rotation.z = -0.1;
+  g.add(leftHand);
+  const rightHand = makeHand(-1);
+  rightHand.position.set(9, 0, 0);
+  rightHand.rotation.z = 0.1;
+  g.add(rightHand);
+  const sparkCnt = Math.floor(800 * Q.particleScale);
+  const sparkGeo = new THREE.BufferGeometry();
+  const sparkPos = new Float32Array(sparkCnt*3);
+  const sparkVel = [];
+  for (let i=0; i<sparkCnt; i++){
+    sparkPos[i*3] = (Math.random()-0.5)*4;
+    sparkPos[i*3+1] = (Math.random()-0.5)*2;
+    sparkPos[i*3+2] = (Math.random()-0.5)*1;
+    sparkVel.push({
+      vx:(Math.random()-0.5)*0.5, vy:(Math.random()-0.5)*0.5, vz:(Math.random()-0.5)*0.5 });
+  }
+  sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
+  g.add(new THREE.Points(sparkGeo, new THREE.PointsMaterial({
+    color:0xffcc44, size:0.15, transparent:true, opacity:0.9,
+    blending:THREE.AdditiveBlending, sizeAttenuation:true, depthWrite:false })));
+  const lbl = makeLabel('ВЫ НИКОГДА НИЧЕГО НЕ КАСАЛИСЬ', 'электроны отталкиваются — контакта нет', 36);
+  lbl.position.set(0, 12, 0);
+  g.add(lbl);
+  const sublbl = makeLabel('И НИКОГДА НЕ КОСНЁТЕСЬ', null, 26, '#ffcc88');
+  sublbl.position.set(0, -12, 0);
+  g.add(sublbl);
+  updaters.push((t, dt) => {
+    const sp = sparkGeo.attributes.position.array;
+    for (let i=0; i<sparkCnt; i++){
+      sparkVel[i].vx += (Math.random()-0.5)*0.15;
+      sparkVel[i].vy += (Math.random()-0.5)*0.15;
+      sparkVel[i].vz += (Math.random()-0.5)*0.15;
+      sparkVel[i].vx *= 0.9; sparkVel[i].vy *= 0.9; sparkVel[i].vz *= 0.9;
+      sp[i*3]   += sparkVel[i].vx * dt;
+      sp[i*3+1] += sparkVel[i].vy * dt;
+      sp[i*3+2] += sparkVel[i].vz * dt;
+      if (Math.abs(sp[i*3]) > 2.5) sparkVel[i].vx *= -1;
+      if (Math.abs(sp[i*3+1]) > 1.5) sparkVel[i].vy *= -1;
+    }
+    sparkGeo.attributes.position.needsUpdate = true;
+    const reach = Math.sin(t * 0.6) * 0.5 + 0.5;
+    leftHand.position.x = -9 + reach * 2.5;
+    rightHand.position.x = 9 - reach * 2.5;
+  });
+  return g;
+}
+
+/* =========================================================
+   24. ТЕПЛОВАЯ СМЕРТЬ
+========================================================= */
+function buildHeatDeath(){
+  const g = new THREE.Group();
+  const c = Math.floor(Q.starCount * 0.5);
+  const pos = [], col = [];
+  for (let i=0; i<c; i++){
+    const a = Math.random()*Math.PI*2;
+    const p = Math.acos(2*Math.random()-1);
+    const r = 40 + Math.random()*80;
+    pos.push(r*Math.sin(p)*Math.cos(a), r*Math.cos(p), r*Math.sin(p)*Math.sin(a));
+    const d = 0.25 + Math.random()*0.4;
+    col.push(d, d*0.4, d*0.15);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    size:0.9, vertexColors:true, transparent:true, opacity:0.65,
+    sizeAttenuation:true, depthWrite:false })));
+  g.add(new THREE.Mesh(
+    new THREE.SphereGeometry(120, 32, 32),
+    new THREE.MeshBasicMaterial({ color:0x180808, transparent:true, opacity:0.35, side:THREE.BackSide })));
+  updaters.push((t, dt) => {
+    const p = geo.attributes.position;
+    for (let i=0; i<p.count; i++){
+      p.setX(i, p.getX(i)*(1 + dt*0.015));
+      p.setY(i, p.getY(i)*(1 + dt*0.015));
+      p.setZ(i, p.getZ(i)*(1 + dt*0.015));
+    }
+    p.needsUpdate = true;
+  });
+  return g;
+}
+
+/* =========================================================
+   25. БОЛЬШОЙ РАЗРЫВ
+========================================================= */
+function buildBigRip(){
+  const g = new THREE.Group();
+  const gals = [];
+  const pal = [
+    { cA:'#ffddaa', cB:'#aa88ff' },
+    { cA:'#aaccff', cB:'#6688ee' },
+    { cA:'#ffe0c0', cB:'#ff8866' }
+  ];
+  for (let i=0; i<25; i++){
+    const p = pal[i % pal.length];
+    const gal = makeGalaxy({
+      radius: 2.5 + Math.random()*2, armCount: 2,
+      starCount: Math.floor(800 * Q.particleScale),
+      dustCount: Math.floor(150 * Q.particleScale),
+      cA: p.cA, cB: p.cB });
+    const theta = Math.random()*Math.PI*2;
+    const phi = Math.acos(2*Math.random()-1);
+    const R = 5 + Math.random()*25;
+    gal.position.set(
+      R*Math.sin(phi)*Math.cos(theta),
+      R*Math.cos(phi),
+      R*Math.sin(phi)*Math.sin(theta));
+    gal.userData = { dir: gal.position.clone().normalize(), r: R, start: Math.random()*3 };
+    g.add(gal);
+    gals.push(gal);
+  }
+  const t0 = Date.now();
+  updaters.push(() => {
+    const t = (Date.now() - t0)/1000;
+    gals.forEach(gal => {
+      const lt = Math.max(0, t - gal.userData.start);
+      const r = gal.userData.r + Math.pow(lt, 1.7) * 10;
+      gal.position.copy(gal.userData.dir).multiplyScalar(r);
+      gal.rotation.y += 0.02;
+    });
+  });
+  return g;
+}
+
+/* =========================================================
+   26. БОЛЬШОЕ СЖАТИЕ
+========================================================= */
+function buildBigCrunch(){
+  const g = new THREE.Group();
+  const gals = [];
+  for (let i=0; i<30; i++){
+    const gal = makeGalaxy({
+      radius: 2 + Math.random()*1.5, armCount: 2,
+      starCount: Math.floor(600 * Q.particleScale),
+      dustCount: Math.floor(120 * Q.particleScale),
+      cA:'#ffe0aa', cB:'#ff9944' });
+    const theta = Math.random()*Math.PI*2;
+    const phi = Math.acos(2*Math.random()-1);
+    const R = 50 + Math.random()*70;
+    gal.position.set(
+      R*Math.sin(phi)*Math.cos(theta),
+      R*Math.cos(phi),
+      R*Math.sin(phi)*Math.sin(theta));
+    gal.userData = { dir: gal.position.clone().normalize(), baseR: R };
+    g.add(gal);
+    gals.push(gal);
+  }
+  const core = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex('rgba(255,255,255,1)', 'rgba(255,180,80,0.9)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  g.add(core);
+  const t0 = Date.now();
+  updaters.push(() => {
+    const t = (Date.now() - t0)/1000;
+    const cyc = (t % 14) / 14;
+    const phase = cyc < 0.5 ? cyc*2 : (1 - cyc)*2;
+    const scale = 1.2 - phase*0.95;
+    gals.forEach(gal => {
+      gal.position.copy(gal.userData.dir).multiplyScalar(gal.userData.baseR * scale);
+      gal.rotation.y += 0.03;
+    });
+    const cs = 4 + phase*55;
+    core.scale.set(cs, cs, 1);
+  });
+  return g;
+}
+
+/* =========================================================
+   27. CARPE DIEM
+========================================================= */
+function buildCarpeDiem(){
+  const g = new THREE.Group();
+  g.add(makeStarField(Math.floor(Q.starCount*0.5)));
+  const star = new THREE.Mesh(
+    new THREE.SphereGeometry(1.5, 24, 24),
+    new THREE.MeshBasicMaterial({ color:0xffffff }));
+  g.add(star);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTex('rgba(255,255,240,1)', 'rgba(255,200,120,0.7)'),
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false }));
+  glow.scale.set(30, 30, 1);
+  g.add(glow);
+  for (let i=0; i<8; i++){
+    const gal = makeGalaxy({
+      radius: 1.8, armCount: 2,
+      starCount: Math.floor(500 * Q.particleScale),
+      dustCount: Math.floor(100 * Q.particleScale),
+      cA:'#ccddff', cB:'#8866cc' });
+    const a = (i/8) * Math.PI * 2;
+    const r = 35 + Math.random()*20;
+    gal.position.set(Math.cos(a)*r, Math.sin(a)*r*0.5, Math.sin(a)*r*0.5);
+    gal.userData.spin = 0.05 + Math.random()*0.12;
+    g.add(gal);
+    updaters.push((t, dt) => { gal.rotation.y += gal.userData.spin * dt; });
+  }
+  updaters.push((t) => {
+    const s = 30 + Math.sin(t*1.5) * 4;
+    glow.scale.set(s, s, 1);
+  });
+  return g;
+}
+
+/* =========================================================
+   РЕЕСТР СЦЕН
+========================================================= */
+const scenes = [
+  { key:'1', label:'☀ Солнечная система', title:'НАШ КОСМИЧЕСКИЙ ДОМ',
+    info:'8 планет + пояс астероидов + комета. Реальные текстуры NASA для Земли и Луны (если загрузились).',
+    cam:[0,55,140], target:[0,0,0], build: buildSolar },
+  { key:'2', label:'🌌 Кластер галактик', title:'КЛАСТЕР ФАКТОВ И ОБЪЕКТОВ',
+    info:'16 спиральных галактик с ядром, рукавами и тёмной пылью.',
+    cam:[0,55,150], target:[0,0,0], build: buildGalaxyCluster },
+  { key:'3', label:'💥 Структура Вселенной', title:'СТРУКТУРА ВСЕЛЕННОЙ',
+    info:'Космическая паутина: галактики в нитях и узлах.',
+    cam:[0,35,130], target:[0,0,0], build: buildBigBang },
+  { key:'4', label:'⚫ Сверхмассивные ЧД', title:'СВЕРХМАССИВНЫЕ ЧЁРНЫЕ ДЫРЫ',
+    info:'Phoenix A и TON 618 — миллиарды масс Солнца.',
+    cam:[0,20,100], target:[0,0,0], build: buildSupermassive },
+  { key:'5', label:'🕳 ЧД + джет', title:'ЛИНЗА И РЕЛЯТИВИСТСКИЙ ДЖЕТ',
+    info:'Искажение пространства-времени + струи плазмы с полюсов.',
+    cam:[0,22,55], target:[0,0,0], build: buildInfoParadox },
+  { key:'6', label:'⚪ Белая дыра', title:'БЕЛАЯ ДЫРА',
+    info:'Объект, обратный ЧД во времени. Всё вылетает наружу.',
+    cam:[0,12,55], target:[0,0,0], build: buildWhiteHole },
+  { key:'7', label:'🌀 Червоточина', title:'МОСТ ЭЙНШТЕЙНА—РОЗЕНА',
+    info:'Тоннель между двумя галактиками.',
+    cam:[0,25,100], target:[0,0,0], build: buildWormhole },
+  { key:'8', label:'🧠 Вселенная = мозг', title:'ВСЕЛЕННАЯ И МОЗГ',
+    info:'Космическая паутина и нейронная сеть выглядят одинаково.',
+    cam:[0,0,80], target:[0,0,0], build: buildCosmicBrain },
+  { key:'9', label:'👽 Парадокс Ферми', title:'ПОЧЕМУ МЫ ОДНИ?',
+    info:'5 теорий: тёмный лес, зоопарк, замещение, рай, быстрое расширение.',
+    cam:[0,12,90], target:[0,0,0], build: buildFermi },
+  { key:'0', label:'⚛ Квантовая физика', title:'КВАНТОВЫЕ ЧУДЕСА',
+    info:'Суперпозиция и запутанность.',
+    cam:[0,15,75], target:[0,0,0], build: buildQuantum },
+  { key:'q', label:'🌑 Войд Волопаса', title:'ВОЙД ВОЛОПАСА',
+    info:'700 млн световых лет пустоты.',
+    cam:[0,10,80], target:[0,0,0], build: buildBootesVoid },
+  { key:'w', label:'❓ Знак вопроса', title:'ЗНАК ВОПРОСА В КОСМОСЕ',
+    info:'Джеймс Уэбб, 2024.',
+    cam:[0,0,45], target:[0,0,0], build: buildQuestionMark },
+  { key:'e', label:'🤚 Рука Бога', title:'РУКА БОГА (PSR B1509-58)',
+    info:'Пульсар вращается сотни раз в секунду.',
+    cam:[0,18,65], target:[0,0,0], build: buildHandOfGod },
+  { key:'r', label:'💗 Туманность Сердце', title:'ТУМАННОСТЬ «СЕРДЦЕ»',
+    info:'IC 1805 в Кассиопее.',
+    cam:[0,0,60], target:[0,0,0], build: buildHeartNebula },
+  { key:'t', label:'🔴 Закат на Марсе', title:'ЗАКАТ НА МАРСЕ',
+    info:'Небо голубое, Солнце белое.',
+    cam:[0,8,50], target:[0,-25,0], build: buildMarsSunset },
+  { key:'y', label:'🏛 Столпы Творения', title:'СТОЛПЫ ТВОРЕНИЯ',
+    info:'Туманность Орёл.',
+    cam:[0,5,100], target:[0,0,0], build: buildPillars },
+  { key:'u', label:'🟠 Юпитер', title:'БОЛЬШОЕ КРАСНОЕ ПЯТНО',
+    info:'Ураган размером с 3 Земли.',
+    cam:[0,10,42], target:[0,0,0], build: buildJupiter },
+  { key:'i', label:'🪐 Супер-Сатурн', title:'J1407b — СУПЕР-САТУРН',
+    info:'Кольца диаметром 120 миллионов км.',
+    cam:[0,30,90], target:[0,0,0], build: buildSuperSaturn },
+  { key:'o', label:'🌍 Экзопланеты', title:'УДИВИТЕЛЬНЫЕ ПЛАНЕТЫ',
+    info:'TrES-2b, KELT-9b, HD 189733b, PSR J1719, Gliese 581c.',
+    cam:[0,6,65], target:[0,0,0], build: buildExoplanets },
+  { key:'p', label:'💥 Звезда = клетка', title:'ВЗРЫВ ЗВЕЗДЫ И РОЖДЕНИЕ КЛЕТКИ',
+    info:'Сверхновая и деление клетки.',
+    cam:[0,0,90], target:[0,0,0], build: buildStarAndCell },
+  { key:'a', label:'⚖ Тонкая настройка', title:'ТОНКАЯ НАСТРОЙКА ВСЕЛЕННОЙ',
+    info:'6 фундаментальных констант.',
+    cam:[0,0,80], target:[0,0,0], build: buildFineTuning },
+  { key:'s', label:'♾ Квантовое бессмертие', title:'КВАНТОВОЕ БЕССМЕРТИЕ',
+    info:'Вселенная ветвится. Это теория!',
+    cam:[0,0,70], target:[0,0,0], build: buildQuantumImmortality },
+  { key:'d', label:'✋ Мы не касались', title:'ВЫ НИКОГДА НИЧЕГО НЕ КАСАЛИСЬ',
+    info:'Электроны отталкиваются.',
+    cam:[0,0,45], target:[0,0,0], build: buildNoTouch },
+  { key:'f', label:'🔥 Тепловая смерть', title:'ТЕПЛОВАЯ СМЕРТЬ ВСЕЛЕННОЙ',
+    info:'Все звёзды погаснут.',
+    cam:[0,35,130], target:[0,0,0], build: buildHeatDeath },
+  { key:'g', label:'💨 Большой разрыв', title:'БОЛЬШОЙ РАЗРЫВ',
+    info:'Галактики разлетятся.',
+    cam:[0,45,140], target:[0,0,0], build: buildBigRip },
+  { key:'h', label:'🌀 Большое сжатие', title:'БОЛЬШОЕ СЖАТИЕ',
+    info:'Всё сожмётся в точку.',
+    cam:[0,45,150], target:[0,0,0], build: buildBigCrunch },
+  { key:'*', label:'🌅 CARPE DIEM', title:'ЛОВИ МОМЕНТ',
+    info:'Вселенная огромна. Но пока мы здесь — живите настоящим.',
+    cam:[0,0,45], target:[0,0,0], build: buildCarpeDiem }
+];
+
+/* =========================================================
+   УПРАВЛЕНИЕ
+========================================================= */
+const menuEl = $el('menu', 'div');
+const titleEl = $el('title', 'div');
+const infoEl = $el('info', 'div');
+const bigTextEl = $el('big-text', 'div');
+let camAnim = null;
+let bigTextTimer = null;
+
+function showBigText(text){
+  if (!bigTextEl) return;
+  bigTextEl.textContent = text;
+  bigTextEl.style.opacity = '1';
+  clearTimeout(bigTextTimer);
+  bigTextTimer = setTimeout(() => { bigTextEl.style.opacity = '0'; }, 2400);
+}
+
+function switchScene(idx, btn){
+  if (idx === currentIdx) return;
+  currentIdx = idx;
+  try {
+    document.querySelectorAll('#menu button').forEach(b => b.classList.remove('active'));
+  } catch(e){}
+  if (btn && btn.classList) btn.classList.add('active');
+  const s = scenes[idx];
+  clearScene();
+  try {
+    sceneRoot.add(s.build());
+  } catch(e){
+    window.__error('Построение сцены: ' + e.message);
+    console.error(e);
+    return;
+  }
+  if (titleEl) titleEl.textContent = s.title;
+  if (infoEl) infoEl.textContent = s.info;
+  camAnim = {
+    fromPos: camera.position.clone(),
+    toPos: new THREE.Vector3(...s.cam),
+    fromTarget: controls.target.clone(),
+    toTarget: new THREE.Vector3(...s.target),
+    t: 0
+  };
+  if (s.key === '*') showBigText('CARPE DIEM');
+}
+
+scenes.forEach((s, i) => {
+  const btn = document.createElement('button');
+  btn.textContent = s.label;
+  btn.onclick = () => switchScene(i, btn);
+  menuEl.appendChild(btn);
+});
+
+addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  const idx = scenes.findIndex(s => s.key === k);
+  if (idx >= 0){
+    switchScene(idx, document.querySelectorAll('#menu button')[idx]);
+  }
+});
+
+/* Цикл */
+const clock = new THREE.Clock();
+let totalT = 0;
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  totalT += dt;
+  updaters.forEach(fn => {
+    try { fn(totalT, dt); } catch(e){}
+  });
+  if (camAnim){
+    camAnim.t = Math.min(1, camAnim.t + dt*1.1);
+    const e = 1 - Math.pow(1 - camAnim.t, 3);
+    camera.position.lerpVectors(camAnim.fromPos, camAnim.toPos, e);
+    controls.target.lerpVectors(camAnim.fromTarget, camAnim.toTarget, e);
+    if (camAnim.t >= 1) camAnim = null;
+  }
+  postFxPass.uniforms.uTime.value = totalT;
+  controls.update();
+  composer.render();
+}
+animate();
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+  postFxPass.uniforms.uResolution.value.set(innerWidth, innerHeight);
+});
+
+/* Старт */
+window.__progress('готово, строим первую сцену…');
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    try {
+      switchScene(0, document.querySelectorAll('#menu button')[0]);
+      const loading = $el('loading', 'div');
+      if (loading) loading.style.opacity = '0';
+      setTimeout(() => {
+        const l = $el('loading', 'div');
+        if (l) l.style.display = 'none';
+      }, 600);
+    } catch(e){
+      window.__error('Финальная ошибка: ' + e.message);
+      console.error(e);
+    }
+  });
+});
+</script>
+</body>
+</html>
